@@ -90,11 +90,8 @@ class TrackingMoreProvider {
                 }
             });
 
-            // Step 2: Get tracking info
-            // Only append courier_code if we know it to avoid 4130 errors
-            const reqUrl = courierCode
-                ? `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}&courier_code=${courierCode}`
-                : `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+            // Step 2: Get tracking info — only tracking_number needed, courier already stored by TrackingMore
+            const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
 
             const res = await axios.get(reqUrl, {
                 headers: this._headers(),
