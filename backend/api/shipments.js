@@ -66,7 +66,7 @@ router.get('/:id', async (req, res) => {
             ) FILTER (WHERE te.id IS NOT NULL) AS events
              FROM shipments s
              LEFT JOIN tracking_events te ON s.tracking_number = te.tracking_number
-             WHERE s.id = $1 OR s.tracking_number = $1
+             WHERE s.id::text = $1 OR s.tracking_number = $1
              GROUP BY s.id`,
             [req.params.id]
         );
@@ -145,7 +145,7 @@ router.patch('/:id', async (req, res) => {
                 source_platform = COALESCE($2, source_platform),
                 ship_time = COALESCE($3, ship_time),
                 delivery_status = COALESCE($4, delivery_status)
-             WHERE id = $5 OR tracking_number = $5
+             WHERE id::text = $5 OR tracking_number = $5
              RETURNING *`,
             [note, source_platform, ship_time, delivery_status, req.params.id]
         );
@@ -161,7 +161,7 @@ router.patch('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     try {
         const { rows } = await query(
-            `DELETE FROM shipments WHERE id = $1 OR tracking_number = $1 RETURNING tracking_number`,
+            `DELETE FROM shipments WHERE id::text = $1 OR tracking_number = $1 RETURNING tracking_number`,
             [req.params.id]
         );
         if (!rows[0]) return res.status(404).json({ error: 'Not found' });
@@ -177,7 +177,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/refresh', async (req, res) => {
     try {
         const { rows } = await query(
-            `SELECT tracking_number, carrier FROM shipments WHERE id = $1 OR tracking_number = $1`,
+            `SELECT tracking_number, carrier FROM shipments WHERE id::text = $1 OR tracking_number = $1`,
             [req.params.id]
         );
         if (!rows[0]) return res.status(404).json({ error: 'Not found' });
