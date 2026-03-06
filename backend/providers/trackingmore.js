@@ -94,17 +94,17 @@ class TrackingMoreProvider {
 
         // Extract events from origin_info and destination_info
         const events = [];
-        if (item.origin_info?.trackinfo) {
-            item.origin_info.trackinfo.forEach(e => {
-                events.push({
-                    event_time: e.CheckpointDate,
-                    status: e.StatusDescription,
-                    location: e.Details || '',
-                    description: e.StatusDescription,
-                    raw_data: e
-                });
+        const trackinfo = item.origin_info?.trackinfo || item.destination_info?.trackinfo || [];
+
+        trackinfo.forEach(e => {
+            events.push({
+                event_time: e.checkpoint_date,
+                status: e.status_description || e.checkpoint_delivery_status,
+                location: e.location || e.city || '',
+                description: e.details || e.status_description,
+                raw_data: e
             });
-        }
+        });
 
         // Sort by time descending
         events.sort((a, b) => new Date(b.event_time) - new Date(a.event_time));
