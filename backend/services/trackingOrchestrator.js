@@ -28,19 +28,24 @@ function buildProvider(row) {
 async function getAvailableProviders() {
     const { rows } = await query(
         `SELECT * FROM api_providers
-         WHERE enabled = true AND api_key IS NOT NULL AND api_key != ''
+         WHERE enabled = true
          ORDER BY priority ASC`
     );
+
+    if (rows.length === 0) {
+        console.warn('[Orchestrator] No enabled providers found in DB');
+    }
 
     const available = [];
     for (const row of rows) {
         // Check Redis for today's count
         const usedToday = await getCount(`ratelimit:${row.name}`);
-        if (usedToday < row.daily_limit) {
-            available.push({ ...row, used_today_live: usedToday });
-        } else {
-            console.log(`[Orchestrator] ${row.name} has reached daily limit (${usedToday}/${row.daily_limit}), skipping`);
+        if (usedToday >= row.daily_limit) {
+            console.log(`[Orchestrator] ${row.name} skipped — daily limit reached (${usedToday}/${row.daily_limit})`);
+            continue;
         }
+        available.push({ ...row, used_today_live: usedToday });
+        console.log(`[Orchestrator] ${row.name} available (used ${usedToday}/${row.daily_limit}, hasKey=${!!row.api_key})`);
     }
     return available;
 }

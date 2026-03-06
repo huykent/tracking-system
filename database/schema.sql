@@ -81,6 +81,7 @@ INSERT INTO settings (key, value) VALUES
     ('telegram_chat_id', ''),
     ('telegram_enabled', 'false'),
     ('tracking_interval_minutes', '5'),
+    ('debug_mode', 'false'),
     ('admin_password', 'admin123')
 ON CONFLICT (key) DO NOTHING;
 

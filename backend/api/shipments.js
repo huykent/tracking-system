@@ -181,9 +181,26 @@ router.post('/:id/refresh', async (req, res) => {
             [req.params.id]
         );
         if (!rows[0]) return res.status(404).json({ error: 'Not found' });
-        await delCache(`shipment:${rows[0].tracking_number}`);
-        await addTrackingJob(rows[0].tracking_number, rows[0].carrier, 'high');
-        res.json({ queued: true, tracking_number: rows[0].tracking_number });
+
+        const { tracking_number, carrier } = rows[0];
+        // Clear cache so we don't return stale data
+        await delCache(`shipment:${tracking_number}`);
+
+        // Run tracking immediately (synchronous) so the UI gets live result
+        const { trackShipment, saveTrackingResult } = require('../services/trackingOrchestrator');
+        try {
+            const result = await trackShipment(tracking_number, carrier);
+            if (result) {
+                await saveTrackingResult(result);
+                return res.json({ queued: false, refreshed: true, tracking_number, delivery_status: result.delivery_status, api_provider: result.api_provider });
+            }
+        } catch (trackErr) {
+            console.warn(`[Refresh] Live tracking failed for ${tracking_number}: ${trackErr.message}, falling back to queue`);
+        }
+
+        // Fallback: queue for background processing
+        await addTrackingJob(tracking_number, carrier, 'high');
+        res.json({ queued: true, tracking_number });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

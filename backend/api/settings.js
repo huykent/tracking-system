@@ -28,6 +28,10 @@ router.patch('/', async (req, res) => {
                 [key, String(value)]
             );
         }
+        // Invalidate the debug mode cache if it was just changed
+        if ('debug_mode' in updates) {
+            try { require('../services/apiLogger').invalidateCache(); } catch { }
+        }
         res.json({ saved: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

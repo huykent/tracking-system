@@ -1,13 +1,28 @@
 const { query } = require('../db');
 
+// Cache debug mode for 10s to avoid a DB query on every API call
+let _debugMode = false;
+let _debugModeCheckedAt = 0;
+
+async function isDebugEnabled() {
+    const now = Date.now();
+    if (now - _debugModeCheckedAt < 10000) return _debugMode; // use cached value
+    try {
+        const { rows } = await query("SELECT value FROM settings WHERE key = 'debug_mode'");
+        _debugMode = rows.length > 0 && rows[0].value === 'true';
+        _debugModeCheckedAt = now;
+    } catch {
+        _debugMode = false;
+    }
+    return _debugMode;
+}
+
 /**
  * Log API requests for debugging Administrative Panel
  */
 async function logApiCall({ trackingNumber, provider, requestUrl, requestMethod, requestPayload, responseStatus, responsePayload, errorMessage }) {
     try {
-        // Check if debug mode is enabled
-        const { rows } = await query("SELECT value FROM settings WHERE key = 'debug_mode'");
-        if (!rows.length || rows[0].value !== 'true') return;
+        if (!(await isDebugEnabled())) return;
 
         await query(
             `INSERT INTO api_logs 
@@ -25,8 +40,15 @@ async function logApiCall({ trackingNumber, provider, requestUrl, requestMethod,
             ]
         );
     } catch (err) {
-        console.error('[Logger] Failed to save API log:', err.message);
+        // Don't crash the main flow — table might not exist yet on first boot
+        if (!err.message?.includes('does not exist')) {
+            console.error('[Logger] Failed to save API log:', err.message);
+        }
     }
 }
 
-module.exports = { logApiCall };
+function invalidateCache() {
+    _debugModeCheckedAt = 0;
+}
+
+module.exports = { logApiCall, invalidateCache };

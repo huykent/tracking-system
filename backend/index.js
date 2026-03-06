@@ -73,6 +73,11 @@ app.listen(PORT, async () => {
                 ON CONFLICT (key) DO NOTHING;
             `);
 
+            await pool.query(`
+                INSERT INTO settings (key, value) VALUES ('tracking_interval_minutes', '5')
+                ON CONFLICT (key) DO NOTHING;
+            `);
+
             console.log('[Server] Migrations complete — starting cron scheduler');
             require('./cron/scheduler');
         } catch (err) {
