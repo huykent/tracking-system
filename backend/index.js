@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-require('./cron/scheduler'); // Start cron jobs
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -42,8 +41,27 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Start ────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`[Server] Backend running on http://localhost:${PORT}`);
+    // Wait for DB then start cron (avoid race with postgres container)
+    const { pool } = require('./db');
+    let attempts = 0;
+    const tryStart = async () => {
+        try {
+            await pool.query('SELECT 1');
+            console.log('[Server] DB ready — starting cron scheduler');
+            require('./cron/scheduler');
+        } catch (err) {
+            attempts++;
+            if (attempts < 10) {
+                console.warn(`[Server] DB not ready yet (attempt ${attempts}), retrying in 3s...`);
+                setTimeout(tryStart, 3000);
+            } else {
+                console.error('[Server] Could not connect to DB after 10 attempts:', err.message);
+            }
+        }
+    };
+    setTimeout(tryStart, 2000); // give pg a 2s head start
 });
 
 module.exports = app;

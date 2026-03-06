@@ -4,7 +4,7 @@ const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgresql://tracking_user:tracking_pass@localhost:5432/tracking_db',
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+    connectionTimeoutMillis: 10000,  // 10s — gives postgres time to boot
 });
 
 pool.on('error', (err) => {
