@@ -1,5 +1,41 @@
 const db = require('./db');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const csv = require('csv-parser');
+
+let carrierDb = {};
+let isDbLoaded = false;
+
+// Hàm load CSV vào memory
+async function loadCarrierDb() {
+    if (isDbLoaded) return;
+    const csvPath = path.join(__dirname, '..', 'carriers.csv');
+    if (!fs.existsSync(csvPath)) {
+        console.warn('[Tracking] carriers.csv not found at', csvPath);
+        return;
+    }
+
+    return new Promise((resolve) => {
+        fs.createReadStream(csvPath)
+            .pipe(csv())
+            .on('data', (row) => {
+                // row: { key, name_en, name_cn, name_hk, url }
+                const key = row.key;
+                if (key) {
+                    carrierDb[key] = row;
+                    // Map thêm alias để search
+                    carrierDb[row.name_en?.toLowerCase()] = key;
+                    if (row.name_cn) carrierDb[row.name_cn] = key;
+                }
+            })
+            .on('end', () => {
+                console.log(`[Tracking] Loaded ${Object.keys(carrierDb).length} carrier entries from CSV.`);
+                isDbLoaded = true;
+                resolve();
+            });
+    });
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -24,31 +60,27 @@ async function geocodeLocation(locationText) {
     return { lat: null, lon: null };
 }
 
-// Bảng mã hãng vận chuyển theo 17Track carrier_key
+// Bảng mã hãng vận chuyển theo 17Track carrier_key (Mã ưu tiên hoặc manual override)
 const CARRIER_17TRACK_KEYS = {
     'shunfeng': 100012,   // SF Express
-    'yunexpress': 90196,   // YunExpress (17track key)
-    'yto': 3001,   // YTO Express (Yuantong) - China Post fallback nếu không khớp
-    'zto': 3001,   // ZTO cũng dùng khu vực CN
-    'sto': 3001,   // STO
-    'yunda': 3001,   // Yunda
-    'best': 3001,   // BEST Express
-    'jt': 100074,   // J&T Express (ID) - hoặc 100079 (MY), 100295 (intl)
-    'cainiao': 3001,   // Cainiao fallback
-    '4px': 3001,   // 4PX
+    'yunexpress': 190008,   // YunExpress (Updated from CSV)
+    'yto': 190157,   // YTO Express (Updated from CSV)
+    'zto': 190455,   // ZTO Express (Updated from CSV)
+    'sto': 190324,   // STO Express (Updated from CSV)
+    'yunda': 190341,   // Yunda Express (Updated from CSV)
+    'best': 190259,   // Best Express (Updated from CSV)
+    'jt': 191118,   // J&T Express (Global/CN fallback)
+    'cainiao': 190271,   // Cainiao
+    '4px': 190094,   // 4PX
     'chinapost': 3011,   // China Post
     'ems': 3013,   // China EMS
-    'yanwen': 3001,   // Yanwen fallback
-    'winit': 3001,
-    'wanbexpress': 3001,
-    'gdexpress': 100150,   // GD Express (MY)
-    'deppon': 3001,
-    'zjs': 3001,
+    'yanwen': 190012,   // Yanwen (Updated from CSV 190012)
+    'winit': 190284,
+    'wanbexpress': 190086,
+    'gdexpress': 100150,
     'ups': 100002,
     'fedex': 100003,
-    'jdexpress': 3001,
-    'royal-mail': 11031,
-    'dhl': 100001,   // DHL Express
+    'dhl': 100001,
     'unknown': 0
 };
 
@@ -129,14 +161,27 @@ function detectCarrier(trackingNumber) {
     return 'unknown';
 }
 
-// Lấy carrier_key 17Track từ tên hãng
+// Lấy carrier_key 17Track từ tên hãng (Ưu tiên map cứng, sau đó search DB CSV)
 function get17TrackCarrierKey(carrierName) {
-    return CARRIER_17TRACK_KEYS[carrierName] || 0; // 0 = auto-detect
+    if (!carrierName) return 0;
+
+    // 1. Kiểm tra bảng map cứng
+    if (CARRIER_17TRACK_KEYS[carrierName]) return CARRIER_17TRACK_KEYS[carrierName];
+
+    // 2. Tìm trong database CSV (nếu đã load)
+    const normalizedName = carrierName.toLowerCase();
+    if (carrierDb[normalizedName]) {
+        const key = carrierDb[normalizedName];
+        return parseInt(key);
+    }
+
+    return 0; // 0 = auto-detect
 }
 
 // Hàm API thực tế 17Track
 async function fetchFrom17TrackAPI(tracking_number, carrier, apiKey) {
     try {
+        await loadCarrierDb(); // Đảm bảo DB đã load
         console.log(`[API 17Track] Fetching real tracking data for ${tracking_number}...`);
 
         // 1. Nhận diện carrier_key nếu có

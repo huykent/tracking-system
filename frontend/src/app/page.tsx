@@ -1,237 +1,225 @@
-"use client";
+'use client'
+import { useEffect, useState } from 'react'
+import { api, DashboardStats, Provider } from '@/lib/api'
+import {
+  Package, TrendingUp, Clock, AlertCircle, CheckCircle2,
+  Zap, Activity, RefreshCw, BarChart2, ArrowUpRight
+} from 'lucide-react'
 
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
-import { useLanguage } from '@/lib/LanguageContext';
-import { Plus, Trash2, Eye, X } from 'lucide-react';
-
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
-
-interface SummaryData {
-  total_shipments: string | number;
-  delivered_shipments: string | number;
-  delivering_shipments: string | number;
-  failed_shipments: string | number;
-  fake_tracking: string | number;
+// ─── Chart component (simple bar chart without external deps) ─
+function SimpleBarChart({ data }: { data: { date: string; count: number }[] }) {
+  const max = Math.max(...data.map(d => d.count), 1)
+  return (
+    <div className="flex items-end gap-1 h-24 mt-2">
+      {data.slice(-30).map((d, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+          <div
+            className="w-full bg-indigo-600/60 hover:bg-indigo-500 rounded-sm transition-all duration-200 cursor-default"
+            style={{ height: `${(d.count / max) * 100}%`, minHeight: d.count > 0 ? 3 : 0 }}
+          />
+          <div className="absolute bottom-full mb-1 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
+            {new Date(d.date).toLocaleDateString('vi-VN')}: {d.count}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
-interface ShipmentData {
-  id: number;
-  tracking_number: string;
-  carrier: string;
-  delivery_status: string;
-}
-
-export default function Home() {
-  const { t } = useLanguage();
-  const [summary, setSummary] = useState<SummaryData | null>(null);
-  const [shipments, setShipments] = useState<ShipmentData[]>([]);
-  const [newTracking, setNewTracking] = useState('');
-  const [newCarrier, setNewCarrier] = useState('');
-
-  const [selectedShipment, setSelectedShipment] = useState<ShipmentData | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [shipmentEvents, setShipmentEvents] = useState<any[]>([]);
-
-  const fetchData = async () => {
-    try {
-      const [sumRes, shipRes] = await Promise.all([
-        axios.get('http://localhost:3001/api/analytics/summary'),
-        axios.get('http://localhost:3001/api/shipments')
-      ]);
-      setSummary(sumRes.data);
-      setShipments(shipRes.data);
-    } catch (err) {
-      console.error('Failed to fetch data', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const addTracking = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTracking) return;
-    try {
-      await axios.post('http://localhost:3001/api/shipments', {
-        tracking_number: newTracking,
-        carrier: newCarrier,
-      });
-      setNewTracking('');
-      setNewCarrier('');
-      fetchData();
-    } catch {
-      alert('Error adding tracking');
-    }
-  };
-
-  const deleteTracking = async (tracking_number: string) => {
-    if (!confirm('Are you sure?')) return;
-    try {
-      await axios.delete(`http://localhost:3001/api/shipments/${tracking_number}`);
-      fetchData();
-    } catch {
-      alert('Error deleting tracking');
-    }
-  };
-
-  const openShipment = async (shipment: ShipmentData) => {
-    try {
-      const res = await axios.get(`http://localhost:3001/api/shipments/${shipment.tracking_number}`);
-      setSelectedShipment(shipment);
-      setShipmentEvents(res.data.events || []);
-    } catch {
-      alert('Error fetching tracking events');
-    }
-  };
+function DonutChart({ data }: { data: { label: string; value: number; color: string }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0) || 1
+  let offset = 0
+  const r = 40, cx = 50, cy = 50, circumference = 2 * Math.PI * r
 
   return (
-    <main className="min-h-screen bg-transparent text-white p-8 font-sans">
-      <h1 className="text-4xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-        {t('app_title')}
-      </h1>
+    <div className="flex items-center gap-4">
+      <svg viewBox="0 0 100 100" className="w-24 h-24 -rotate-90">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth="12" />
+        {data.map((d, i) => {
+          const fraction = d.value / total
+          const dash = fraction * circumference
+          const el = (
+            <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+              stroke={d.color} strokeWidth="12"
+              strokeDasharray={`${dash} ${circumference - dash}`}
+              strokeDashoffset={-offset * circumference}
+              strokeLinecap="round"
+            />
+          )
+          offset += fraction
+          return el
+        })}
+      </svg>
+      <div className="space-y-2">
+        {data.map(d => (
+          <div key={d.label} className="flex items-center gap-2 text-xs">
+            <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+            <span className="text-gray-400">{d.label}</span>
+            <span className="text-gray-200 font-medium ml-auto pl-4">{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          <StatCard title={t('total_shipments')} value={summary.total_shipments} />
-          <StatCard title={t('delivered')} value={summary.delivered_shipments} color="text-green-400" />
-          <StatCard title={t('delivering')} value={summary.delivering_shipments} color="text-yellow-400" />
-          <StatCard title={t('failed_fake')} value={Number(summary.failed_shipments) + Number(summary.fake_tracking)} color="text-red-400" />
+function StatCard({ label, value, icon: Icon, color, sub }: {
+  label: string; value: number; icon: React.ElementType; color: string; sub?: string
+}) {
+  return (
+    <div className="stat-card fade-in-up">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-wider font-medium">{label}</p>
+          <p className="text-3xl font-bold text-white mt-1">{value.toLocaleString()}</p>
+          {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
         </div>
-      )}
+        <div className={`p-2.5 rounded-xl ${color}`}>
+          <Icon size={20} className="text-white" />
+        </div>
+      </div>
+    </div>
+  )
+}
 
-      <div className="grid grid-cols-1 gap-8 mb-12">
-        <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl shadow-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">{t('recent_shipments')}</h2>
+export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+
+  const loadStats = async () => {
+    try {
+      const data = await api.dashboard.stats()
+      setStats(data)
+      setLastUpdated(new Date())
+    } catch (err) {
+      console.error('Failed to load stats', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadStats()
+    const interval = setInterval(loadStats, 30000) // Refresh every 30s
+    return () => clearInterval(interval)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="card h-28 skeleton" />
+        ))}
+      </div>
+    )
+  }
+
+  const successRate = stats ? Math.round((stats.delivered / (stats.total || 1)) * 100) : 0
+
+  return (
+    <div className="space-y-6 fade-in-up">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Overview</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Last updated: {lastUpdated?.toLocaleTimeString('vi-VN') || '—'}
+          </p>
+        </div>
+        <button onClick={loadStats} className="btn-ghost">
+          <RefreshCw size={15} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Shipments" value={stats?.total || 0} icon={Package} color="bg-indigo-600" />
+        <StatCard label="Delivering" value={stats?.delivering || 0} icon={TrendingUp} color="bg-blue-600" sub={`${stats?.pending || 0} pending`} />
+        <StatCard label="Delivered" value={stats?.delivered || 0} icon={CheckCircle2} color="bg-green-600" sub={`${successRate}% success rate`} />
+        <StatCard label="Failed" value={stats?.failed || 0} icon={AlertCircle} color="bg-red-600" />
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Daily shipments */}
+        <div className="card lg:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <BarChart2 size={16} className="text-indigo-400" />
+              <h3 className="font-semibold text-sm text-white">Shipments per Day</h3>
+            </div>
+            <span className="text-xs text-gray-500">Last 30 days</span>
           </div>
+          {stats?.daily && stats.daily.length > 0
+            ? <SimpleBarChart data={stats.daily} />
+            : <div className="h-24 flex items-center justify-center text-gray-600 text-sm">No data yet</div>
+          }
+        </div>
 
-          <form onSubmit={addTracking} className="flex gap-2 mb-6">
-            <input
-              type="text"
-              placeholder={t('tracking_number')}
-              value={newTracking}
-              onChange={(e) => setNewTracking(e.target.value)}
-              className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
-            />
-            <input
-              type="text"
-              placeholder={t('carrier')}
-              value={newCarrier}
-              onChange={(e) => setNewCarrier(e.target.value)}
-              className="w-1/3 bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
-            />
-            <button type="submit" className="bg-blue-600 hover:bg-blue-500 p-2 rounded-lg text-white transition-colors">
-              <Plus size={24} />
-            </button>
-          </form>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-neutral-800 text-neutral-400">
-                  <th className="py-3 px-4">{t('tracking_number')}</th>
-                  <th className="py-3 px-4">{t('carrier')}</th>
-                  <th className="py-3 px-4">{t('status')}</th>
-                  <th className="py-3 px-4 text-center">{t('actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shipments.map((s: ShipmentData) => (
-                  <tr key={s.id} className="border-b border-neutral-800 hover:bg-neutral-800/50 transition-colors">
-                    <td className="py-3 px-4 font-mono">{s.tracking_number}</td>
-                    <td className="py-3 px-4">{s.carrier}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs uppercase font-medium tracking-wider
-                        ${s.delivery_status === 'delivered' ? 'bg-green-500/20 text-green-400' :
-                          s.delivery_status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                        {s.delivery_status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => openShipment(s)} className="text-blue-500 hover:text-blue-400 transition-colors p-2 rounded-lg hover:bg-blue-500/10">
-                          <Eye size={18} />
-                        </button>
-                        <button onClick={() => deleteTracking(s.tracking_number)} className="text-red-500 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-red-500/10">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {shipments.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-center py-6 text-neutral-500">No shipments tracking found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        {/* Status breakdown */}
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity size={16} className="text-indigo-400" />
+            <h3 className="font-semibold text-sm text-white">Status Breakdown</h3>
           </div>
+          <DonutChart data={[
+            { label: 'Delivering', value: stats?.delivering || 0, color: '#3b82f6' },
+            { label: 'Delivered', value: stats?.delivered || 0, color: '#22c55e' },
+            { label: 'Pending', value: stats?.pending || 0, color: '#6b7280' },
+            { label: 'Failed', value: stats?.failed || 0, color: '#ef4444' },
+          ]} />
         </div>
       </div>
 
-      {selectedShipment && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-[9999]">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-neutral-800 flex justify-between items-center bg-neutral-950">
-              <div>
-                <h2 className="text-xl font-bold">{t('tracking_number')}: <span className="text-blue-400">{selectedShipment.tracking_number}</span></h2>
-                <p className="text-sm text-neutral-400 mt-1">{t('carrier')}: {selectedShipment.carrier.toUpperCase()}</p>
-              </div>
-              <button onClick={() => setSelectedShipment(null)} className="text-neutral-400 hover:text-white transition-colors bg-neutral-800 p-2 rounded-full hover:bg-neutral-700">
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="space-y-6">
-                {shipmentEvents.length === 0 ? (
-                  <p className="text-center text-neutral-500 py-8">No tracking events yet.</p>
-                ) : (
-                  shipmentEvents.map((evt, idx) => {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    let parsedData: any = null;
-                    try { if (evt.raw_data) parsedData = JSON.parse(evt.raw_data); } catch { }
-                    return (
-                      <div key={idx} className="flex gap-4 relative">
-                        {idx !== shipmentEvents.length - 1 && (
-                          <div className="absolute top-8 left-[11px] bottom-0 w-[2px] bg-neutral-800 -mb-6"></div>
-                        )}
-                        <div className="w-6 h-6 rounded-full bg-blue-500/20 border-4 border-blue-500 flex-shrink-0 z-10 mt-1"></div>
-                        <div className="flex-1 pb-6">
-                          <p className="font-semibold text-lg text-white mb-1">{evt.status}</p>
-                          <p className="text-neutral-400 text-sm">{evt.location}</p>
-                          <p className="text-neutral-500 text-xs mt-1">{new Date(evt.event_time).toLocaleString()}</p>
-
-                          {parsedData?.proof_url && (
-                            <div className="mt-4">
-                              <p className="text-sm text-neutral-400 mb-2">Proof of Delivery:</p>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={parsedData.proof_url} alt="Proof" className="rounded-lg object-cover w-full max-w-sm h-48 border border-neutral-700" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+      {/* Bottom row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Top carriers */}
+        <div className="card">
+          <h3 className="font-semibold text-sm text-white mb-4">Top Carriers</h3>
+          <div className="space-y-3">
+            {(stats?.carriers || []).slice(0, 6).map((c, i) => {
+              const pct = Math.round((c.count / (stats?.total || 1)) * 100)
+              return (
+                <div key={i}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-300">{c.carrier || 'Unknown'}</span>
+                    <span className="text-gray-500">{c.count} ({pct}%)</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full">
+                    <div className="h-full bg-indigo-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              )
+            })}
+            {(!stats?.carriers || stats.carriers.length === 0) && (
+              <p className="text-gray-600 text-sm">No data yet</p>
+            )}
           </div>
         </div>
-      )}
-    </main>
-  );
-}
 
-function StatCard({ title, value, color = "text-white" }: { title: string, value: string | number, color?: string }) {
-  return (
-    <div className="bg-neutral-900 p-6 rounded-2xl shadow-xl shadow-black/50 border border-neutral-800 hover:border-blue-500/50 transition-colors group">
-      <h3 className="text-neutral-400 text-sm font-medium tracking-wide border-b border-neutral-800 pb-2 uppercase mb-4">{title}</h3>
-      <p className={`text-5xl font-bold ${color} group-hover:scale-105 transform origin-left transition-transform`}>{value}</p>
+        {/* Queue stats */}
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <Zap size={16} className="text-indigo-400" />
+            <h3 className="font-semibold text-sm text-white">Background Queue</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Waiting', value: stats?.queue?.waiting, color: 'text-yellow-400 bg-yellow-900/20' },
+              { label: 'Active', value: stats?.queue?.active, color: 'text-blue-400 bg-blue-900/20' },
+              { label: 'Completed', value: stats?.queue?.completed, color: 'text-green-400 bg-green-900/20' },
+              { label: 'Failed', value: stats?.queue?.failed, color: 'text-red-400 bg-red-900/20' },
+            ].map(q => (
+              <div key={q.label} className={`rounded-lg px-3 py-2.5 ${q.color}`}>
+                <p className="text-2xl font-bold">{q.value ?? 0}</p>
+                <p className="text-xs opacity-70 mt-0.5">{q.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }

@@ -1,177 +1,276 @@
-"use client";
+'use client'
+import { useEffect, useState } from 'react'
+import { api, Provider } from '@/lib/api'
+import { Key, ToggleLeft, ToggleRight, RotateCw, Save, CheckCircle, AlertCircle, MessageCircle, Zap, ChevronUp, ChevronDown } from 'lucide-react'
 
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import { useLanguage } from '@/lib/LanguageContext';
-import { Save } from 'lucide-react';
+function ProviderRow({ provider, onSave }: { provider: Provider; onSave: () => void }) {
+    const [apiKey, setApiKey] = useState('')
+    const [enabled, setEnabled] = useState(provider.enabled)
+    const [dailyLimit, setDailyLimit] = useState(provider.daily_limit)
+    const [priority, setPriority] = useState(provider.priority)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
 
-export default function SettingsPage() {
-    const { t } = useLanguage();
-    const [domain, setDomain] = useState('');
-    const [botToken, setBotToken] = useState('');
-    const [ship24Key, setShip24Key] = useState('');
-    const [track17Key, setTrack17Key] = useState('');
-    const [apiProvider, setApiProvider] = useState('ship24');
-    const [loading, setLoading] = useState(true);
+    const usagePct = Math.min(100, Math.round((provider.used_today / provider.daily_limit) * 100))
+    const usageColor = usagePct > 80 ? 'bg-red-500' : usagePct > 60 ? 'bg-yellow-500' : 'bg-green-500'
 
-    useEffect(() => {
-        async function loadSettings() {
-            try {
-                const res = await axios.get('http://localhost:3001/api/settings');
-                if (res.data.domain) setDomain(res.data.domain);
-                if (res.data.botToken) setBotToken(res.data.botToken);
-                if (res.data.ship24Key) setShip24Key(res.data.ship24Key);
-                if (res.data['17trackKey']) setTrack17Key(res.data['17trackKey']);
-                if (res.data.apiProvider) setApiProvider(res.data.apiProvider);
-            } catch {
-                console.error('Failed to load settings');
-            } finally {
-                setLoading(false);
-            }
-        }
-        loadSettings();
-    }, []);
-
-    const saveSetting = async (key: string, value: string) => {
+    const save = async () => {
+        setSaving(true)
         try {
-            await axios.post('http://localhost:3001/api/settings', { key, value });
-
-            if (key === 'botToken') {
-                try {
-                    await axios.post('http://localhost:3001/api/telegram/reinit');
-                } catch (err) {
-                    console.log("Could not reinit bot", err);
-                }
-            }
-
-            alert(t('save') + ' OK!');
-        } catch {
-            alert('Error saving');
+            await api.providers.update(provider.name, {
+                api_key: apiKey || undefined,
+                enabled, daily_limit: dailyLimit, priority,
+            })
+            setSaved(true)
+            setTimeout(() => setSaved(false), 2000)
+            onSave()
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setSaving(false)
         }
-    };
+    }
 
-    if (loading) return null;
+    const reset = async () => {
+        await api.providers.reset(provider.name)
+        onSave()
+    }
 
     return (
-        <div className="min-h-screen bg-neutral-950 text-white p-8">
-            <h1 className="text-3xl font-bold mb-8">{t('admin_panel')}</h1>
+        <div className={`card transition-colors duration-200 ${enabled ? 'border-gray-700' : 'border-gray-800 opacity-60'}`}>
+            <div className="flex flex-wrap items-start gap-4">
+                {/* Provider info */}
+                <div className="flex-1 min-w-48">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold
+              ${enabled ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-500'}`}>
+                            {provider.label.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <p className="font-semibold text-sm text-white">{provider.label}</p>
+                                {provider.has_key && (
+                                    <span className="badge badge-delivering text-xs">
+                                        <Key size={10} /> API Key Set
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-gray-500">Priority: {provider.priority}</p>
+                        </div>
+                    </div>
 
-            <div className="max-w-2xl space-y-8">
-                <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl shadow-lg">
-                    <h2 className="text-xl font-semibold mb-4 text-neutral-200">{t('domain_config')}</h2>
-                    <div className="flex gap-4">
-                        <input
-                            type="text"
-                            value={domain}
-                            onChange={e => setDomain(e.target.value)}
-                            placeholder="https://example.com"
-                            className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                        />
-                        <button
-                            onClick={() => saveSetting('domain', domain)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
-                            <Save size={18} /> {t('save')}
-                        </button>
+                    {/* Usage bar */}
+                    <div className="mt-3">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>Usage today</span>
+                            <span>{provider.used_today} / {provider.daily_limit}</span>
+                        </div>
+                        <div className="h-1.5 bg-gray-800 rounded-full">
+                            <div className={`h-full ${usageColor} rounded-full transition-all duration-500`} style={{ width: `${usagePct}%` }} />
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl shadow-lg">
-                    <h2 className="text-xl font-semibold mb-4 text-neutral-200">{t('telegram_bot')}</h2>
-                    <div className="flex gap-4">
+                {/* Controls */}
+                <div className="flex flex-wrap gap-3 items-end">
+                    {/* API Key input */}
+                    <div className="w-56">
+                        <label className="text-xs text-gray-500 mb-1 block">API Key</label>
                         <input
                             type="password"
-                            value={botToken}
-                            onChange={e => setBotToken(e.target.value)}
-                            placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
-                            className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
+                            className="input"
+                            placeholder={provider.has_key ? '●●●●●●●●' : 'Enter API key...'}
+                            value={apiKey}
+                            onChange={e => setApiKey(e.target.value)}
                         />
-                        <button
-                            onClick={() => saveSetting('botToken', botToken)}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
-                            <Save size={18} /> {t('save')}
+                    </div>
+
+                    {/* Daily Limit */}
+                    <div className="w-24">
+                        <label className="text-xs text-gray-500 mb-1 block">Daily Limit</label>
+                        <input type="number" className="input" value={dailyLimit}
+                            onChange={e => setDailyLimit(parseInt(e.target.value))} />
+                    </div>
+
+                    {/* Priority */}
+                    <div className="w-20">
+                        <label className="text-xs text-gray-500 mb-1 block">Priority</label>
+                        <input type="number" className="input" value={priority} min={1} max={99}
+                            onChange={e => setPriority(parseInt(e.target.value))} />
+                    </div>
+
+                    {/* Toggle */}
+                    <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Enabled</label>
+                        <button onClick={() => setEnabled(!enabled)}
+                            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-all duration-200 border
+                ${enabled ? 'bg-green-900/30 text-green-400 border-green-800/50' : 'bg-gray-800 text-gray-500 border-gray-700'}`}>
+                            {enabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                            {enabled ? 'On' : 'Off'}
                         </button>
                     </div>
-                    <p className="mt-3 text-sm text-neutral-500">Find your bot via Telegram, type /start to get your tracking updates instantly. The bot re-initializes itself automatically!</p>
-                </div>
-                <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-2xl shadow-lg">
-                    <h2 className="text-xl font-semibold mb-4 text-neutral-200">Tracking API Provider</h2>
 
-                    <div className="flex gap-4 mb-6">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="apiProvider"
-                                value="ship24"
-                                checked={apiProvider === 'ship24'}
-                                onChange={(e) => {
-                                    setApiProvider(e.target.value);
-                                    saveSetting('apiProvider', e.target.value);
-                                }}
-                                className="w-4 h-4 text-blue-600 bg-neutral-950 border-neutral-700"
-                            />
-                            <span className="text-neutral-300">Ship24</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                name="apiProvider"
-                                value="17track"
-                                checked={apiProvider === '17track'}
-                                onChange={(e) => {
-                                    setApiProvider(e.target.value);
-                                    saveSetting('apiProvider', e.target.value);
-                                }}
-                                className="w-4 h-4 text-blue-600 bg-neutral-950 border-neutral-700"
-                            />
-                            <span className="text-neutral-300">17Track</span>
-                        </label>
-                    </div>
-
-                    <div className="space-y-6">
-                        {apiProvider === 'ship24' && (
-                            <div>
-                                <h3 className="text-sm font-medium mb-2 text-neutral-400">{t('ship24_api_key')}</h3>
-                                <div className="flex gap-4">
-                                    <input
-                                        type="password"
-                                        value={ship24Key}
-                                        onChange={e => setShip24Key(e.target.value)}
-                                        placeholder="apik_..."
-                                        className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                    />
-                                    <button
-                                        onClick={() => saveSetting('ship24Key', ship24Key)}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
-                                        <Save size={18} /> {t('save')}
-                                    </button>
-                                </div>
-                                <p className="mt-2 text-xs text-neutral-500">Create an account on Ship24 to get a public API key for comprehensive tracking.</p>
-                            </div>
-                        )}
-
-                        {apiProvider === '17track' && (
-                            <div>
-                                <h3 className="text-sm font-medium mb-2 text-neutral-400">17Track API Key</h3>
-                                <div className="flex gap-4">
-                                    <input
-                                        type="password"
-                                        value={track17Key}
-                                        onChange={e => setTrack17Key(e.target.value)}
-                                        placeholder="API Token from 17track..."
-                                        className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                    />
-                                    <button
-                                        onClick={() => saveSetting('17trackKey', track17Key)}
-                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
-                                        <Save size={18} /> {t('save')}
-                                    </button>
-                                </div>
-                                <p className="mt-2 text-xs text-neutral-500">Register on 17Track Developer Portal for the API Key.</p>
-                            </div>
-                        )}
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                        <button onClick={reset} className="btn-ghost" title="Reset daily counter">
+                            <RotateCw size={14} />
+                        </button>
+                        <button onClick={save} disabled={saving} className="btn-primary">
+                            {saved ? <CheckCircle size={14} /> : <Save size={14} />}
+                            {saved ? 'Saved!' : saving ? 'Saving...' : 'Save'}
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
-    );
+    )
+}
+
+export default function SettingsPage() {
+    const [providers, setProviders] = useState<Provider[]>([])
+    const [settings, setSettings] = useState<Record<string, string>>({})
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+    const [testResult, setTestResult] = useState<string | null>(null)
+
+    const load = async () => {
+        const [p, s] = await Promise.all([api.providers.list(), api.settings.get()])
+        setProviders(p)
+        setSettings(s)
+        setLoading(false)
+    }
+
+    useEffect(() => { load() }, [])
+
+    const saveSettings = async () => {
+        setSaving(true)
+        try {
+            await api.settings.save(settings)
+            setSaved(true)
+            setTimeout(() => setSaved(false), 2000)
+        } catch (err) { console.error(err) }
+        finally { setSaving(false) }
+    }
+
+    const testTelegram = async () => {
+        try {
+            await api.settings.testTelegram()
+            setTestResult('✅ Message sent! Check your Telegram.')
+        } catch (err: any) {
+            setTestResult(`❌ Failed: ${err.message}`)
+        }
+        setTimeout(() => setTestResult(null), 4000)
+    }
+
+    return (
+        <div className="max-w-4xl mx-auto space-y-6 fade-in-up">
+
+            {/* API Providers */}
+            <div>
+                <div className="flex items-center gap-2 mb-4">
+                    <Zap size={18} className="text-indigo-400" />
+                    <h2 className="text-lg font-bold text-white">API Providers</h2>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">
+                    Configure tracking API providers. The system automatically falls back to the next provider if one is at its limit.
+                </p>
+
+                {loading ? (
+                    <div className="space-y-4">
+                        {[...Array(3)].map((_, i) => <div key={i} className="card h-28 skeleton" />)}
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        {/* Summary table */}
+                        <div className="card p-0 overflow-hidden">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Provider</th>
+                                        <th>Status</th>
+                                        <th>Daily Limit</th>
+                                        <th>Used Today</th>
+                                        <th>Priority</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {providers.map(p => (
+                                        <tr key={p.name}>
+                                            <td className="font-medium text-white">{p.label}</td>
+                                            <td>
+                                                <span className={`badge ${p.enabled ? 'badge-delivered' : 'badge-pending'}`}>
+                                                    {p.enabled ? 'Active' : 'Disabled'}
+                                                </span>
+                                            </td>
+                                            <td className="text-gray-300">{p.daily_limit.toLocaleString()}</td>
+                                            <td>
+                                                <span className={p.used_today / p.daily_limit > 0.8 ? 'text-red-400' : 'text-gray-300'}>
+                                                    {p.used_today.toLocaleString()}
+                                                </span>
+                                            </td>
+                                            <td className="text-gray-300">{p.priority}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Provider config cards */}
+                        {providers.map(p => <ProviderRow key={p.name} provider={p} onSave={load} />)}
+                    </div>
+                )}
+            </div>
+
+            {/* Telegram Settings */}
+            <div>
+                <div className="flex items-center gap-2 mb-4">
+                    <MessageCircle size={18} className="text-indigo-400" />
+                    <h2 className="text-lg font-bold text-white">Telegram Notifications</h2>
+                </div>
+                <div className="card space-y-4">
+                    <div>
+                        <label className="text-xs text-gray-400 mb-1.5 block">Bot Token</label>
+                        <input type="password" className="input"
+                            placeholder="Enter Telegram Bot Token from @BotFather"
+                            value={settings.telegram_bot_token !== '***' ? settings.telegram_bot_token || '' : ''}
+                            onChange={e => setSettings(s => ({ ...s, telegram_bot_token: e.target.value }))} />
+                    </div>
+                    <div>
+                        <label className="text-xs text-gray-400 mb-1.5 block">Chat ID</label>
+                        <input type="text" className="input"
+                            placeholder="Your chat ID or group ID  (e.g. -100123456)"
+                            value={settings.telegram_chat_id || ''}
+                            onChange={e => setSettings(s => ({ ...s, telegram_chat_id: e.target.value }))} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <label className="text-sm text-gray-300">Enable Notifications</label>
+                            <button
+                                onClick={() => setSettings(s => ({ ...s, telegram_enabled: s.telegram_enabled === 'true' ? 'false' : 'true' }))}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all duration-200 border
+                  ${settings.telegram_enabled === 'true'
+                                        ? 'bg-green-900/30 text-green-400 border-green-800/50'
+                                        : 'bg-gray-800 text-gray-500 border-gray-700'}`}>
+                                {settings.telegram_enabled === 'true' ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                {settings.telegram_enabled === 'true' ? 'Enabled' : 'Disabled'}
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={testTelegram} className="btn-ghost">
+                                <MessageCircle size={14} /> Test
+                            </button>
+                            <button onClick={saveSettings} disabled={saving} className="btn-primary">
+                                {saved ? <CheckCircle size={14} /> : <Save size={14} />}
+                                {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Settings'}
+                            </button>
+                        </div>
+                    </div>
+                    {testResult && (
+                        <div className="mt-2 text-sm text-gray-300 bg-gray-800 rounded-lg p-3">{testResult}</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
 }

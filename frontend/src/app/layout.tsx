@@ -1,44 +1,30 @@
-import type { Metadata } from "next";
-import localFont from "next/font/local";
-import "./globals.css";
-import { LanguageProvider } from "@/lib/LanguageContext";
-import Sidebar from "@/components/layout/Sidebar";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import Sidebar from '@/components/layout/Sidebar'
+import TopBar from '@/components/layout/TopBar'
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Tracking Platform",
-  description: "Smart Logistics Tracking System",
-};
+  title: 'Logistics Tracking Admin',
+  description: 'Multi-carrier logistics tracking dashboard',
+}
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black text-white`}
-      >
-        <LanguageProvider>
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <div className="flex-1 max-h-screen overflow-y-auto bg-neutral-950">
+    <html lang="en" className="dark">
+      <body className={`${inter.className} bg-gray-950 text-gray-100 min-h-screen`}>
+        <div className="flex h-screen overflow-hidden">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <TopBar />
+            <main className="flex-1 overflow-y-auto p-6">
               {children}
-            </div>
+            </main>
           </div>
-        </LanguageProvider>
+        </div>
       </body>
     </html>
-  );
+  )
 }

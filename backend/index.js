@@ -1,30 +1,49 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const db = require('./db');
+require('./cron/scheduler'); // Start cron jobs
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+const PORT = process.env.PORT || 4000;
 
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
+// ─── Middleware ───────────────────────────────────────────
+app.use(cors({ origin: '*' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Request logging
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
 });
 
-// Import routers
-const shipmentsRouter = require('./api/shipments');
-const analyticsRouter = require('./api/analytics');
-const telegramRouter = require('./api/telegram');
-const settingsRouter = require('./api/settings');
+// ─── Routes ──────────────────────────────────────────────
+app.use('/api/shipments', require('./api/shipments'));
+app.use('/api/dashboard', require('./api/dashboard'));
+app.use('/api/providers', require('./api/providers'));
+app.use('/api/settings', require('./api/settings'));
 
-app.use('/api/shipments', shipmentsRouter(db));
-app.use('/api/analytics', analyticsRouter(db));
-app.use('/api/telegram', telegramRouter(db));
-app.use('/api/settings', settingsRouter(db));
+// ─── Health check ─────────────────────────────────────────
+app.get('/health', async (req, res) => {
+    const { pool } = require('./db');
+    const { redis } = require('./redis');
+    try {
+        await pool.query('SELECT 1');
+        const ping = await redis.ping();
+        res.json({ status: 'ok', db: 'connected', redis: ping === 'PONG' ? 'connected' : 'error' });
+    } catch (err) {
+        res.status(503).json({ status: 'error', message: err.message });
+    }
+});
 
-require('./worker');
+// ─── Error handler ────────────────────────────────────────
+app.use((err, req, res, next) => {
+    console.error('[Server] Unhandled error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+});
 
-const PORT = process.env.PORT || 3001;
+// ─── Start ────────────────────────────────────────────────
 app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`[Server] Backend running on http://localhost:${PORT}`);
 });
+
+module.exports = app;

@@ -1,50 +1,63 @@
-"use client";
+'use client'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import {
+    LayoutDashboard, Package, Settings, Truck, Activity, ChevronRight
+} from 'lucide-react'
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useLanguage } from '@/lib/LanguageContext';
-import { LayoutDashboard, Settings } from 'lucide-react';
+const navItems = [
+    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/shipments', label: 'Shipments', icon: Package },
+    { href: '/settings', label: 'Settings', icon: Settings },
+]
 
 export default function Sidebar() {
-    const pathname = usePathname();
-    const { t, language, setLanguage } = useLanguage();
-
+    const pathname = usePathname()
     return (
-        <div className="w-64 bg-neutral-900 border-r border-neutral-800 h-screen flex flex-col hidden md:flex text-white">
-            <div className="p-6">
-                <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                    TrackingOS
-                </h2>
-            </div>
-
-            <nav className="flex-1 px-4 space-y-2">
-                <Link href="/"
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${pathname === '/' ? 'bg-blue-500/10 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                    <LayoutDashboard size={20} />
-                    <span className="font-medium">{t('dashboard')}</span>
-                </Link>
-                <Link href="/settings"
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${pathname === '/settings' ? 'bg-blue-500/10 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}`}>
-                    <Settings size={20} />
-                    <span className="font-medium">{t('settings')}</span>
-                </Link>
-            </nav>
-
-            <div className="p-6 border-t border-neutral-800">
-                <div className="text-sm text-neutral-500 mb-2 font-medium">{t('language')}</div>
-                <div className="flex bg-neutral-800 rounded-lg p-1">
-                    <button
-                        onClick={() => setLanguage('vi')}
-                        className={`flex-1 py-1 text-sm font-medium rounded-md transition-colors ${language === 'vi' ? 'bg-blue-500 text-white' : 'text-neutral-400 hover:text-white'}`}>
-                        VI
-                    </button>
-                    <button
-                        onClick={() => setLanguage('en')}
-                        className={`flex-1 py-1 text-sm font-medium rounded-md transition-colors ${language === 'en' ? 'bg-blue-500 text-white' : 'text-neutral-400 hover:text-white'}`}>
-                        EN
-                    </button>
+        <aside className="w-60 bg-gray-900 border-r border-gray-800 flex flex-col shrink-0">
+            {/* Logo */}
+            <div className="h-16 flex items-center px-5 border-b border-gray-800">
+                <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+                        <Truck size={16} className="text-white" />
+                    </div>
+                    <div>
+                        <p className="font-semibold text-sm text-white leading-tight">LogTrack</p>
+                        <p className="text-xs text-gray-500">Admin Panel</p>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+
+            {/* Navigation */}
+            <nav className="flex-1 px-3 py-4 space-y-1">
+                {navItems.map(({ href, label, icon: Icon }) => {
+                    const active = pathname === href || (href !== '/' && pathname.startsWith(href))
+                    return (
+                        <Link
+                            key={href}
+                            href={href}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group
+                ${active
+                                    ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                                    : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                                }`}
+                        >
+                            <Icon size={17} className={active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'} />
+                            {label}
+                            {active && <ChevronRight size={14} className="ml-auto text-indigo-500" />}
+                        </Link>
+                    )
+                })}
+            </nav>
+
+            {/* Bottom info */}
+            <div className="px-4 py-4 border-t border-gray-800">
+                <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-xs text-gray-500">System Online</span>
+                </div>
+                <p className="text-xs text-gray-600 mt-1">v2.0.0</p>
+            </div>
+        </aside>
+    )
 }

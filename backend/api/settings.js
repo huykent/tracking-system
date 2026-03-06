@@ -1,33 +1,48 @@
 const express = require('express');
+const router = express.Router();
+const { query } = require('../db');
 
-module.exports = (db) => {
-    const router = express.Router();
+// ─── GET /api/settings ────────────────────────────────────
+router.get('/', async (req, res) => {
+    try {
+        const { rows } = await query(`SELECT key, value FROM settings ORDER BY key`);
+        const settings = Object.fromEntries(rows.map(r => [r.key, r.value]));
+        // Mask sensitive fields
+        if (settings.telegram_bot_token) settings.telegram_bot_token = '***';
+        if (settings.admin_password) settings.admin_password = '***';
+        res.json(settings);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
-    router.get('/', async (req, res) => {
-        try {
-            const result = await db.query('SELECT key, value FROM settings');
-            const settings = {};
-            result.rows.forEach(row => {
-                settings[row.key] = row.value;
-            });
-            res.json(settings);
-        } catch (err) {
-            res.status(500).json({ error: err.message });
-        }
-    });
-
-    router.post('/', async (req, res) => {
-        const { key, value } = req.body;
-        try {
-            await db.run(
-                'INSERT OR REPLACE INTO settings (id, key, value, updated_at) VALUES ((SELECT id FROM settings WHERE key = ?), ?, ?, CURRENT_TIMESTAMP)',
-                [key, key, value]
+// ─── PATCH /api/settings ──────────────────────────────────
+router.patch('/', async (req, res) => {
+    try {
+        const updates = req.body; // { key: value, ... }
+        for (const [key, value] of Object.entries(updates)) {
+            if (typeof value === 'undefined') continue;
+            await query(
+                `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+                 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+                [key, String(value)]
             );
-            res.json({ success: true, key, value });
-        } catch (err) {
-            res.status(500).json({ error: err.message });
         }
-    });
+        res.json({ saved: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
-    return router;
-};
+// ─── POST /api/settings/telegram/test ────────────────────
+router.post('/telegram/test', async (req, res) => {
+    try {
+        const { sendMessage } = require('../services/telegramService');
+        await sendMessage('✅ Test message from Logistics Tracking System!');
+        res.json({ sent: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;

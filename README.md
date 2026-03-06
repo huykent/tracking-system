@@ -1,101 +1,172 @@
-# Tracking System - Ship24 & 17Track Integration
+# 🚢 Logistics Tracking Admin Dashboard
 
-A modern shipment tracking system with a Next.js frontend, Node.js backend, and Telegram integration.
+A production-ready logistics tracking system with multi-carrier support, real-time updates, and Telegram notifications.
 
-## Features
--   Tracking with Ship24 and 17Track APIs.
--   Auto-detection of carriers (SF Express, YunExpress, YTO, ZTO, etc.).
--   Telegram Bot for notifications and tracking.
--   Admin Panel for settings and API configuration.
--   Responsive Dashboard with analytics.
+## Stack
+
+| Layer      | Technology                              |
+|------------|----------------------------------------|
+| Frontend   | Next.js 14, React, TailwindCSS          |
+| Backend    | Node.js, Express                        |
+| Database   | PostgreSQL (with UUID, JSONB indexes)   |
+| Cache      | Redis (ioredis)                         |
+| Queue      | BullMQ                                  |
+| Scheduler  | node-cron (every 5 min)                 |
+| Notify     | Telegram Bot API                        |
 
 ---
 
-## Installation Guide (Ubuntu)
+## Features
 
-This guide assumes you have a clean Ubuntu installation (20.04 or 22.04).
+- ✅ **Multi-API Tracking** — Ship24, 17Track, Kuaidi100 with automatic fallback
+- ✅ **Carrier Auto-Detection** — Regex-based detection for 20+ Chinese & international carriers
+- ✅ **Background Queue** — BullMQ workers process tracking updates every 5 minutes
+- ✅ **Rate Limit Management** — Daily API limits tracked in Redis, auto-switches to next provider
+- ✅ **Telegram Notifications** — New events and delivery confirmations
+- ✅ **Admin Panel** — Configure API keys, enable/disable providers, set priorities
+- ✅ **Shipments Dashboard** — Statistics, carrier breakdown, daily trend charts
+- ✅ **Tracking Timeline** — Visual event history per shipment
+- ✅ **Bulk Import** — Add up to 200 tracking numbers at once
+- ✅ **Docker-Ready** — Single `docker compose up` to run everything
 
-### 1. Update System
+---
+
+## Quick Start (Ubuntu / Linux)
+
+### 1. Clone & Configure
+
 ```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-### 2. Install Node.js & npm
-We recommend using Node.js v18 or later.
-```bash
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-
-### 3. Install SQLite3
-```bash
-sudo apt install -y sqlite3
-```
-
-### 4. Clone Repository
-```bash
-git clone YOUR_REPO_URL
+git clone https://github.com/huykent/tracking-system.git
 cd tracking-system
 ```
 
-### 5. Install Dependencies
-Install dependencies for both frontend and backend.
+### 2. Start with Docker Compose
+
 ```bash
-# Root dependencies
-npm install
-
-# Backend dependencies
-cd backend
-npm install
-
-# Frontend dependencies
-cd ../frontend
-npm install
+docker compose up -d
 ```
 
-### 6. Setup Database
-The database will be automatically created on first run using `database/schema.sql`.
+This starts:
+- **PostgreSQL** on port 5432
+- **Redis** on port 6379
+- **Backend API** on port 4000
+- **Background Worker** (BullMQ)
+- **Frontend** on port **3000**
 
-### 7. Run with PM2 (Recommended for Production)
-Install PM2 to keep the services running in the background.
-```bash
-sudo npm install -g pm2
-```
+Wait ~30 seconds for services to initialize.
 
-#### Run Backend
-```bash
-cd ~/tracking-system/backend
-pm2 start index.js --name "tracking-backend"
-pm2 start worker.js --name "tracking-worker"
-```
+### 3. Access the App
 
-#### Run Frontend
-```bash
-cd ~/tracking-system/frontend
-npm run build
-pm2 start npm --name "tracking-frontend" -- start
-```
+- **Dashboard:** http://localhost:3000
+- **API Health:** http://localhost:4000/health
 
-### 8. Access the Application
--   Frontend: `http://your-server-ip:3000`
--   Admin Panel: `http://your-server-ip:3000/settings`
+### 4. Configure API Keys
 
-### 9. API Configuration & Telegram Bot Setup
-1.  **API Keys:**
-    -   **Ship24:** Create an account at [ship24.com](https://www.ship24.com/) to get your public API key.
-    -   **17Track:** Register at the [17Track Developer Portal](https://api.17track.net/en/apicenter/dashboard) to get your API Token.
-2.  **Telegram Bot:**
-    -   Talk to [@BotFather](https://t.me/BotFather) on Telegram to create a new bot and get the **Bot Token**.
-3.  **App Setup:**
-    -   Go to the Admin Panel in your web app: `http://localhost:3000/settings`.
-    -   Select your preferred **Tracking API Provider** (Ship24 or 17Track).
-    -   Paste your respective API Key and Telegram Bot Token.
-    -   Click **Save**. The bot will automatically initialize and you can start tracking by typing `/start` to it.
+Go to **Settings** in the dashboard:
+
+1. Enter your API keys for the tracking providers:
+   - **Ship24:** https://ship24.com (get free API key)
+   - **17Track:** https://api.17track.net/en/apicenter/dashboard
+   - **Kuaidi100:** No key needed for free tier
+
+2. Set provider **Priority** (lower = tries first)
+3. Configure your **Telegram Bot** for notifications
 
 ---
 
-## Technical Stack
--   **Frontend:** Next.js (Tailwind CSS, Lucide React, Axios).
--   **Backend:** Node.js (Express, SQLite3, node-cron, node-telegram-bot-api).
--   **Database:** SQLite3.
--   **APIs:** Ship24, 17Track.
+## Manual Setup (Without Docker)
+
+### Requirements
+- Node.js ≥ 18
+- PostgreSQL 14+
+- Redis 6+
+
+### Backend
+
+```bash
+cd backend
+npm install
+DATABASE_URL=postgresql://user:pass@localhost:5432/tracking_db \
+REDIS_URL=redis://localhost:6379 \
+npm start
+```
+
+### Worker (separate terminal)
+
+```bash
+cd backend
+NODE_ENV=production \
+DATABASE_URL=postgresql://user:pass@localhost:5432/tracking_db \
+REDIS_URL=redis://localhost:6379 \
+npm run worker
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+NEXT_PUBLIC_API_URL=http://localhost:4000 \
+npm run dev
+```
+
+---
+
+## API Endpoints
+
+### Shipments
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/api/shipments` | List with pagination, filtering, sorting |
+| POST   | `/api/shipments` | Add single shipment (auto-detects carrier) |
+| POST   | `/api/shipments/bulk` | Bulk import (up to 200) |
+| GET    | `/api/shipments/:id` | Get with event timeline |
+| PATCH  | `/api/shipments/:id` | Update shipment |
+| DELETE | `/api/shipments/:id` | Delete shipment |
+| POST   | `/api/shipments/:id/refresh` | Queue immediate tracking update |
+
+### Dashboard
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/api/dashboard/stats` | Statistics + queue status |
+| GET    | `/api/dashboard/providers` | API provider summary |
+
+### Providers & Settings
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/api/providers` | List API providers |
+| PATCH  | `/api/providers/:name` | Update provider config |
+| POST   | `/api/providers/:name/reset` | Reset daily counter |
+| GET    | `/api/settings` | Get settings |
+| PATCH  | `/api/settings` | Save settings |
+| POST   | `/api/settings/telegram/test` | Test Telegram |
+
+---
+
+## Carrier Detection
+
+Supports auto-detecting these carriers from tracking number patterns:
+
+| Carrier | Prefix/Pattern | 17Track Key |
+|---------|---------------|-------------|
+| SF Express (顺丰) | `SF` + 12-15 digits | 100012 |
+| YunExpress (云途) | `YT` + 16 digits | 190008 |
+| YTO Express (圆通) | `EN` + 9 digits + `CN` | 190157 |
+| ZTO Express (中通) | `773`, `303` prefix | 190455 |
+| STO Express (申通) | `36` prefix | 190324 |
+| Yunda (韵达) | `YD` + 16 digits | 190341 |
+| BEST Express (百世) | `BX` + 12 digits | 190259 |
+| J&T Express | `JT` + 12 digits | 190442 |
+| Cainiao (菜鸟) | `LP`, `LX` prefix | 190271 |
+| 4PX (递四方) | `RE`/`RR` + 9 + `CN` | 190094 |
+| China Post | Single letter + 9 + `CN` | 3011 |
+| China EMS | `E` + letter + 9 + `CN` | 3013 |
+| Yanwen (燕文) | `MH` + 9 + letters | 190012 |
+| DHL Express | 22 or 34 digits | 100001 |
+| FedEx | 20 digits | 100003 |
+| UPS | `1Z` + 16 chars | 100002 |
+
+---
+
+## License
+MIT
