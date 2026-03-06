@@ -2,7 +2,7 @@ const axios = require('axios');
 const { logApiCall } = require('../services/apiLogger');
 
 /**
- * TrackingMore Provider
+ * TrackingMore Provider (v4 API)
  */
 class TrackingMoreProvider {
     constructor(apiKey) {
@@ -18,52 +18,84 @@ class TrackingMoreProvider {
     }
 
     /**
-     * Map internal carrier names to TrackingMore courier_code
+     * Map internal carrier names/labels to TrackingMore courier_code.
+     * Returns null if unknown — caller will omit courier_code for auto-detect.
      */
     _getCarrierCode(carrierName) {
+        if (!carrierName) return null;
+
+        // Normalize: lowercase, strip spaces/hyphens/dots/underscores
+        const key = String(carrierName).toLowerCase().replace(/[\s\-_\.]+/g, '');
+
         const map = {
-            shunfeng: 'sf-express',
-            yunexpress: 'yunexpress',
-            yto: 'yto-express',
-            zto: 'zto-express',
-            sto: 'sto-express',
-            yunda: 'yunda-express',
-            best: 'best-express',
-            jt: 'jt-express',
+            // SF Express
+            shunfeng: 'sf-express', sfexpress: 'sf-express', sf: 'sf-express',
+            // YTO Express
+            yuantong: 'yto-express', yto: 'yto-express', ytoexpress: 'yto-express',
+            // ZTO Express
+            zhongtong: 'zto-express', zto: 'zto-express', ztoexpress: 'zto-express',
+            // STO Express
+            shentong: 'sto-express', sto: 'sto-express', stoexpress: 'sto-express',
+            // Yunda
+            yunda: 'yunda-express', yundaexpress: 'yunda-express',
+            // Best Express
+            baishi: 'best-express', best: 'best-express', bestexpress: 'best-express',
+            // JT Express
+            jt: 'jt-express', jtexpress: 'jt-express',
+            // Cainiao
             cainiao: 'cainiao',
+            // 4PX
             '4px': '4px',
+            // China Post
             chinapost: 'china-post',
+            // EMS
             ems: 'china-ems',
+            // Yanwen
             yanwen: 'yanwen',
+            // International
             ups: 'ups',
             fedex: 'fedex',
             dhl: 'dhl',
-            jdexpress: 'jd-logistics',
+            // JD Logistics
+            jd: 'jd-logistics', jdexpress: 'jd-logistics', jdlogistics: 'jd-logistics',
+            // YunExpress
+            yunexpress: 'yunexpress',
+            // USPS
+            usps: 'usps',
         };
-        return map[carrierName] || carrierName;
+
+        const code = map[key];
+        if (!code) {
+            console.warn(`[TrackingMore] Unknown carrier: "${carrierName}" (key: "${key}") — will let TrackingMore auto-detect`);
+        }
+        return code || null;
     }
 
     async track(trackingNumber, carrierName) {
         try {
             const courierCode = this._getCarrierCode(carrierName);
 
-            // Step 1: Create tracking (if not exists)
-            // TrackingMore often requires a POST to create before GETting info
-            await axios.post('https://api.trackingmore.com/v4/trackings/create', {
-                tracking_number: trackingNumber,
-                courier_code: courierCode
-            }, {
-                headers: this._headers(),
-                timeout: 10000
-            }).catch(e => {
-                // If it already exists (4016), that's fine
+            // Step 1: Create tracking (omit courier_code if unknown — let TM auto-detect)
+            const createPayload = { tracking_number: trackingNumber };
+            if (courierCode) createPayload.courier_code = courierCode;
+
+            await axios.post(
+                'https://api.trackingmore.com/v4/trackings/create',
+                createPayload,
+                { headers: this._headers(), timeout: 10000 }
+            ).catch(e => {
+                // Code 4016 = already exists — that's fine
                 if (e.response?.data?.meta?.code !== 4016) {
                     console.warn(`[TrackingMore] Create warning for ${trackingNumber}:`, e.response?.data?.meta?.message || e.message);
                 }
             });
 
             // Step 2: Get tracking info
-            const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}&courier_code=${courierCode}`;
+            // Only append courier_code if we know it to avoid 4130 errors
+            const reqUrl = courierCode
+                ? `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}&courier_code=${courierCode}`
+                : `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+
             const res = await axios.get(reqUrl, {
                 headers: this._headers(),
                 timeout: 10000
@@ -71,7 +103,7 @@ class TrackingMoreProvider {
 
             await logApiCall({
                 trackingNumber, provider: this.name, requestUrl: reqUrl, requestMethod: 'GET',
-                requestPayload: null, responseStatus: res?.status, responsePayload: res?.data
+                requestPayload: createPayload, responseStatus: res?.status, responsePayload: res?.data
             });
 
             return this._normalize(res.data, trackingNumber);
@@ -86,28 +118,30 @@ class TrackingMoreProvider {
     }
 
     _normalize(data, trackingNumber) {
-        const item = data?.data?.[0] || data?.data; // TrackingMore returns array in batch/get
+        const item = data?.data?.[0] || data?.data;
         if (!item) return null;
 
         /**
-         * Status mapping:
-         * pending, info_received, in_transit, picking, out_for_delivery, 
+         * TrackingMore status values:
+         * pending, info_received, in_transit, picking, out_for_delivery,
          * delivered, expired, failed_attempt, exception, returning, returned
          */
         let delivery_status = 'pending';
         const tmStatus = item.delivery_status;
 
         if (tmStatus === 'delivered') delivery_status = 'delivered';
-        else if (['in_transit', 'picking', 'out_for_delivery'].includes(tmStatus)) delivery_status = 'delivering';
-        else if (['failed_attempt', 'exception'].includes(tmStatus)) delivery_status = 'failed';
-        else if (tmStatus === 'pending') delivery_status = 'pending';
-        else if (tmStatus) delivery_status = 'delivering';
+        else if (['in_transit', 'picking', 'out_for_delivery', 'info_received'].includes(tmStatus)) delivery_status = 'delivering';
+        else if (['failed_attempt', 'exception', 'expired'].includes(tmStatus)) delivery_status = 'failed';
+        else if (['returning', 'returned'].includes(tmStatus)) delivery_status = 'failed';
+        else if (tmStatus && tmStatus !== 'pending') delivery_status = 'delivering';
 
-        // Extract events from origin_info and destination_info
+        // Collect events from origin_info and destination_info
         const events = [];
-        const trackinfo = item.origin_info?.trackinfo || item.destination_info?.trackinfo || [];
+        const originTrack = item.origin_info?.trackinfo || [];
+        const destTrack = item.destination_info?.trackinfo || [];
+        const allEvents = [...originTrack, ...destTrack];
 
-        trackinfo.forEach(e => {
+        for (const e of allEvents) {
             events.push({
                 event_time: e.checkpoint_date,
                 status: e.status_description || e.checkpoint_delivery_status,
@@ -115,16 +149,16 @@ class TrackingMoreProvider {
                 description: e.details || e.status_description,
                 raw_data: e
             });
-        });
+        }
 
-        // Sort by time descending
+        // Sort most recent first
         events.sort((a, b) => new Date(b.event_time) - new Date(a.event_time));
 
         return {
             tracking_number: trackingNumber,
-            carrier: item.courier_code,
+            carrier: item.courier_code || carrierName,
             delivery_status,
-            events: events
+            events
         };
     }
 }
