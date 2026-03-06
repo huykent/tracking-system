@@ -34,7 +34,7 @@ class Kuaidi100Provider {
             if (this.apiKey) {
                 const crypto = require('crypto');
                 const param = JSON.stringify({ com, num: trackingNumber });
-                const sign = crypto.createHash('md4').update(param + this.apiSecret + this.apiKey).digest('hex').toUpperCase();
+                const sign = crypto.createHash('md5').update(param + this.apiSecret + this.apiKey).digest('hex').toUpperCase();
 
                 const reqUrl = 'https://poll.kuaidi100.com/poll/query.do';
                 const res = await axios.post(reqUrl,

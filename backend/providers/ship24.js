@@ -24,7 +24,7 @@ class Ship24Provider {
             // Ship24: Create tracker then get results
             const createRes = await axios.post(
                 `${BASE_URL}/trackers`,
-                { trackingNumbers: [trackingNumber] },
+                { trackingNumber: trackingNumber },
                 { headers: this._headers(), timeout: 10000 }
             );
 
