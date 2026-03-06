@@ -3,6 +3,7 @@ const { getCount, incr, getCache, setCache } = require('../redis');
 const Ship24Provider = require('../providers/ship24');
 const Track17Provider = require('../providers/seventeen');
 const Kuaidi100Provider = require('../providers/kuaidi100');
+const TrackingMoreProvider = require('../providers/trackingmore');
 const { detectCarrier } = require('./carrierDetector');
 const crypto = require('crypto');
 
@@ -16,6 +17,7 @@ function buildProvider(row) {
         case 'ship24': return new Ship24Provider(row.api_key);
         case '17track': return new Track17Provider(row.api_key);
         case 'kuaidi100': return new Kuaidi100Provider(row.api_key, row.api_secret);
+        case 'trackingmore': return new TrackingMoreProvider(row.api_key);
         default: return null;
     }
 }
