@@ -81,7 +81,7 @@ services:
     container_name: tracking_frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://backend:4000
+      BACKEND_URL: http://backend:4000
     ports:
       - "3000:3000"
     depends_on:
