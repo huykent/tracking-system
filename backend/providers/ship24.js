@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { logApiCall } = require('../services/apiLogger');
 
 const BASE_URL = 'https://api.ship24.com/public/v1';
 
@@ -31,14 +32,21 @@ class Ship24Provider {
             if (!trackerId) throw new Error('No tracker ID returned from Ship24');
 
             // Get tracking results
-            const resultsRes = await axios.get(
-                `${BASE_URL}/trackers/${trackerId}/results`,
-                { headers: this._headers(), timeout: 10000 }
-            );
+            const resultsUrl = `${BASE_URL}/trackers/${trackerId}/results`;
+            const resultsRes = await axios.get(resultsUrl, { headers: this._headers(), timeout: 10000 });
+
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: resultsUrl, requestMethod: 'GET',
+                requestPayload: null, responseStatus: resultsRes?.status, responsePayload: resultsRes?.data
+            });
 
             return this._normalize(resultsRes.data, trackingNumber);
         } catch (err) {
             console.error(`[Ship24] Error tracking ${trackingNumber}:`, err.message);
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET',
+                errorMessage: err.message, responseStatus: err.response?.status, responsePayload: err.response?.data
+            });
             return null;
         }
     }

@@ -100,3 +100,21 @@ CREATE TRIGGER shipments_updated_at
 CREATE TRIGGER api_providers_updated_at
     BEFORE UPDATE ON api_providers
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ─── API Logs (Debug Mode) ────────────────────────────────
+CREATE TABLE IF NOT EXISTS api_logs (
+    id SERIAL PRIMARY KEY,
+    tracking_number VARCHAR(100),
+    provider VARCHAR(50),
+    request_url TEXT,
+    request_method VARCHAR(10),
+    request_payload JSONB,
+    response_status INTEGER,
+    response_payload JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_logs_tracking ON api_logs(tracking_number);
+CREATE INDEX IF NOT EXISTS idx_api_logs_provider ON api_logs(provider);
+CREATE INDEX IF NOT EXISTS idx_api_logs_created  ON api_logs(created_at DESC);

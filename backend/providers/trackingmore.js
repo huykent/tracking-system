@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { logApiCall } = require('../services/apiLogger');
 
 /**
  * TrackingMore Provider
@@ -62,14 +63,24 @@ class TrackingMoreProvider {
             });
 
             // Step 2: Get tracking info
-            const res = await axios.get(`https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}&courier_code=${courierCode}`, {
+            const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}&courier_code=${courierCode}`;
+            const res = await axios.get(reqUrl, {
                 headers: this._headers(),
                 timeout: 10000
+            });
+
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: reqUrl, requestMethod: 'GET',
+                requestPayload: null, responseStatus: res?.status, responsePayload: res?.data
             });
 
             return this._normalize(res.data, trackingNumber);
         } catch (err) {
             console.error(`[TrackingMore] Error tracking ${trackingNumber}:`, err.response?.data || err.message);
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET',
+                errorMessage: err.message, responseStatus: err.response?.status, responsePayload: err.response?.data
+            });
             return null;
         }
     }

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { logApiCall } = require('../services/apiLogger');
 
 const REGISTER_URL = 'https://api.17track.net/track/v2.2/register';
 const GETINFO_URL = 'https://api.17track.net/track/v2.2/gettrackinfo';
@@ -43,6 +44,11 @@ class Track17Provider {
                 headers: this._headers(), timeout: 15000,
             });
 
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: GETINFO_URL, requestMethod: 'POST',
+                requestPayload: payload, responseStatus: infoRes?.status, responsePayload: infoRes?.data
+            });
+
             if (!infoRes?.data?.data?.accepted?.length) {
                 console.warn(`[17Track] No data for ${trackingNumber}, rejected:`, JSON.stringify(infoRes?.data?.data?.rejected || []));
             } else {
@@ -52,6 +58,10 @@ class Track17Provider {
             return this._normalize(infoRes.data, trackingNumber);
         } catch (err) {
             console.error(`[17Track] Error tracking ${trackingNumber}:`, err.response?.data || err.message);
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'POST',
+                errorMessage: err.message, responseStatus: err.response?.status, responsePayload: err.response?.data
+            });
             return null;
         }
     }

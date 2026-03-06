@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { logApiCall } = require('../services/apiLogger');
 
 /**
  * Kuaidi100 Free API Provider
@@ -35,19 +36,27 @@ class Kuaidi100Provider {
                 const param = JSON.stringify({ com, num: trackingNumber });
                 const sign = crypto.createHash('md4').update(param + this.apiSecret + this.apiKey).digest('hex').toUpperCase();
 
-                const res = await axios.post('https://poll.kuaidi100.com/poll/query.do',
+                const reqUrl = 'https://poll.kuaidi100.com/poll/query.do';
+                const res = await axios.post(reqUrl,
                     new URLSearchParams({
                         customer: this.apiKey, // In Kuaidi100, Customer is often the "Key"
                         sign,
                         param
                     }), { timeout: 10000 });
 
+                await logApiCall({
+                    trackingNumber, provider: this.name, requestUrl: reqUrl, requestMethod: 'POST',
+                    requestPayload: { param }, responseStatus: res?.status, responsePayload: res?.data
+                });
+
                 return this._normalize(res.data, trackingNumber);
             }
 
             // Fallback: Web query (Limited / Free)
-            const res = await axios.get(`https://www.kuaidi100.com/query`, {
-                params: { type: com, postid: trackingNumber, temp: Math.random() },
+            const reqUrl = `https://www.kuaidi100.com/query`;
+            const reqQuery = { type: com, postid: trackingNumber, temp: Math.random() };
+            const res = await axios.get(reqUrl, {
+                params: reqQuery,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Referer': 'https://www.kuaidi100.com/'
@@ -55,9 +64,18 @@ class Kuaidi100Provider {
                 timeout: 8000,
             });
 
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: reqUrl, requestMethod: 'GET',
+                requestPayload: reqQuery, responseStatus: res?.status, responsePayload: res?.data
+            });
+
             return this._normalize(res.data, trackingNumber);
         } catch (err) {
             console.error(`[Kuaidi100] Error tracking ${trackingNumber}:`, err.message);
+            await logApiCall({
+                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET',
+                errorMessage: err.message, responseStatus: err.response?.status, responsePayload: err.response?.data
+            });
             return null;
         }
     }

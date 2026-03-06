@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { api, Provider } from '@/lib/api'
-import { Key, ToggleLeft, ToggleRight, RotateCw, Save, CheckCircle, AlertCircle, MessageCircle, Zap, ChevronUp, ChevronDown } from 'lucide-react'
+import { Key, ToggleLeft, ToggleRight, RotateCw, Save, CheckCircle, AlertCircle, MessageCircle, Zap, ChevronUp, ChevronDown, Settings as SettingsIcon, Terminal } from 'lucide-react'
 
 function ProviderRow({ provider, onSave }: { provider: Provider; onSave: () => void }) {
     const [apiKey, setApiKey] = useState('')
@@ -271,6 +271,40 @@ export default function SettingsPage() {
                     )}
                 </div>
             </div>
+
+            {/* Advanced / System Settings */}
+            <div>
+                <div className="flex items-center gap-2 mb-4">
+                    <Terminal size={18} className="text-indigo-400" />
+                    <h2 className="text-lg font-bold text-white">System Settings</h2>
+                </div>
+                <div className="card space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <label className="text-sm text-gray-300">API Debug Mode</label>
+                            <p className="text-xs text-gray-500">Log all API provider requests and responses. Can consume database space quickly.</p>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                            <button
+                                onClick={() => setSettings(s => ({ ...s, debug_mode: s.debug_mode === 'true' ? 'false' : 'true' }))}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all duration-200 border
+                                    ${settings.debug_mode === 'true'
+                                        ? 'bg-green-900/30 text-green-400 border-green-800/50'
+                                        : 'bg-gray-800 text-gray-500 border-gray-700'}`}>
+                                {settings.debug_mode === 'true' ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                {settings.debug_mode === 'true' ? 'Enabled' : 'Disabled'}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex justify-end border-t border-gray-800 pt-3">
+                        <button onClick={saveSettings} disabled={saving} className="btn-primary">
+                            {saved ? <CheckCircle size={14} /> : <Save size={14} />}
+                            {saved ? 'Saved!' : saving ? 'Saving...' : 'Save Settings'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     )
 }

@@ -40,6 +40,12 @@ export const api = {
         save: (data: any) => fetchAPI('/api/settings', { method: 'PATCH', body: JSON.stringify(data) }),
         testTelegram: () => fetchAPI('/api/settings/telegram/test', { method: 'POST' }),
     },
+
+    logs: {
+        list: (params: { page?: number; limit?: number; tracking_number?: string }) =>
+            fetchAPI<any>(`/api/logs?${new URLSearchParams(params as any)}`),
+        clear: () => fetchAPI('/api/logs', { method: 'DELETE' }),
+    },
 }
 
 // ─── Types ────────────────────────────────────────────────

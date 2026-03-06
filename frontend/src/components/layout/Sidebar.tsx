@@ -2,13 +2,14 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-    LayoutDashboard, Package, Settings, Truck, Activity, ChevronRight
+    LayoutDashboard, Package, Settings, Truck, Activity, ChevronRight, Terminal
 } from 'lucide-react'
 
 const navItems = [
     { href: '/', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/shipments', label: 'Shipments', icon: Package },
     { href: '/settings', label: 'Settings', icon: Settings },
+    { href: '/logs', label: 'Debug Logs', icon: Terminal },
 ]
 
 export default function Sidebar() {

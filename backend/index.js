@@ -20,6 +20,7 @@ app.use('/api/shipments', require('./api/shipments'));
 app.use('/api/dashboard', require('./api/dashboard'));
 app.use('/api/providers', require('./api/providers'));
 app.use('/api/settings', require('./api/settings'));
+app.use('/api/logs', require('./api/logs'));
 
 // ─── Health check ─────────────────────────────────────────
 app.get('/health', async (req, res) => {
@@ -49,7 +50,30 @@ app.listen(PORT, async () => {
     const tryStart = async () => {
         try {
             await pool.query('SELECT 1');
-            console.log('[Server] DB ready — starting cron scheduler');
+            console.log('[Server] DB ready...');
+
+            // Auto-migrate tables
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS api_logs (
+                    id SERIAL PRIMARY KEY,
+                    tracking_number VARCHAR(100),
+                    provider VARCHAR(50),
+                    request_url TEXT,
+                    request_method VARCHAR(10),
+                    request_payload JSONB,
+                    response_status INTEGER,
+                    response_payload JSONB,
+                    error_message TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            `);
+
+            await pool.query(`
+                INSERT INTO settings (key, value) VALUES ('debug_mode', 'false')
+                ON CONFLICT (key) DO NOTHING;
+            `);
+
+            console.log('[Server] Migrations complete — starting cron scheduler');
             require('./cron/scheduler');
         } catch (err) {
             attempts++;
