@@ -80,11 +80,17 @@ pm2 start npm --name "tracking-frontend" -- start
 -   Frontend: `http://your-server-ip:3000`
 -   Admin Panel: `http://your-server-ip:3000/settings`
 
-### 9. Telegram Bot Setup
-1.  Talk to [@BotFather](https://t.me/BotFather) to create a new bot and get the Token.
-2.  Go to the Admin Panel in your web app.
-3.  Enter the **Telegram Bot Token**.
-4.  The bot will automatically initialize. Search for your bot on Telegram and type `/start`.
+### 9. API Configuration & Telegram Bot Setup
+1.  **API Keys:**
+    -   **Ship24:** Create an account at [ship24.com](https://www.ship24.com/) to get your public API key.
+    -   **17Track:** Register at the [17Track Developer Portal](https://api.17track.net/en/apicenter/dashboard) to get your API Token.
+2.  **Telegram Bot:**
+    -   Talk to [@BotFather](https://t.me/BotFather) on Telegram to create a new bot and get the **Bot Token**.
+3.  **App Setup:**
+    -   Go to the Admin Panel in your web app: `http://localhost:3000/settings`.
+    -   Select your preferred **Tracking API Provider** (Ship24 or 17Track).
+    -   Paste your respective API Key and Telegram Bot Token.
+    -   Click **Save**. The bot will automatically initialize and you can start tracking by typing `/start` to it.
 
 ---
 
