@@ -60,8 +60,10 @@ async function trackShipment(trackingNumber, preferredCarrier) {
         throw new Error('No API providers available (all disabled or limit reached)');
     }
 
-    // Detect carrier if not provided
-    const carrier = preferredCarrier || detectCarrier(trackingNumber);
+    // Ensure we have a proper carrier object with name and carrierKey
+    let carrier = (typeof preferredCarrier === 'object' && preferredCarrier !== null && preferredCarrier.name)
+        ? preferredCarrier
+        : detectCarrier(trackingNumber);
 
     for (const providerRow of providers) {
         const provider = buildProvider(providerRow);

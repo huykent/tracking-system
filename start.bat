@@ -22,4 +22,4 @@ cd ..
 echo ==============================================
 echo Starting Smart Logistics Tracking Platform...
 echo ==============================================
-npx concurrently "cd backend && node index.js" "cd frontend && npm run dev"
+npx concurrently "cd backend && node index.js" "cd backend && node queue/trackingWorker.js" "cd frontend && npm run dev"

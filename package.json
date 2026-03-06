@@ -4,7 +4,10 @@
   "description": "- Frontend: Next.js, React, TailwindCSS, Chart.js, Leaflet.js\r - Backend: Node.js, Express, BullMQ, node-cron\r - Database: PostgreSQL\r - Cache: Redis",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd backend && npm run dev:worker\" \"cd frontend && npm run dev\"",
+    "backend": "cd backend && npm run dev",
+    "worker": "cd backend && npm run dev:worker",
+    "frontend": "cd frontend && npm run dev"
   },
   "keywords": [],
   "author": "",

@@ -22,17 +22,20 @@ class Track17Provider {
     async track(trackingNumber, carrier, carrierKey = 0) {
         try {
             const payload = [{ number: trackingNumber, carrier: carrierKey || undefined }];
+            console.log(`[17Track] Attempting to track ${trackingNumber} with carrierKey=${carrierKey || 'auto'}`);
 
             // Step 1: Register
             const regRes = await axios.post(REGISTER_URL, payload, {
                 headers: this._headers(), timeout: 10000,
             }).catch(e => {
-                console.warn(`[17Track] Register warning for ${trackingNumber}:`, e?.response?.data?.message || e.message);
-                return null;
+                const errMsg = e?.response?.data?.message || e.message;
+                const errCode = e?.response?.data?.code || 'ERROR';
+                console.warn(`[17Track] Register warning for ${trackingNumber}: ${errCode} - ${errMsg}`);
+                return e.response; // Still proceed to step 2 if possible
             });
 
             if (regRes?.data?.data?.rejected?.length > 0) {
-                console.warn('[17Track] Rejected:', regRes.data.data.rejected);
+                console.warn(`[17Track] Registration rejected for ${trackingNumber}:`, JSON.stringify(regRes.data.data.rejected[0]));
             }
 
             // Step 2: Get tracking info
@@ -40,9 +43,15 @@ class Track17Provider {
                 headers: this._headers(), timeout: 15000,
             });
 
+            if (!infoRes?.data?.data?.accepted?.length) {
+                console.warn(`[17Track] No data for ${trackingNumber}, rejected:`, JSON.stringify(infoRes?.data?.data?.rejected || []));
+            } else {
+                console.log(`[17Track] Success for ${trackingNumber}:`, JSON.stringify(infoRes.data).substring(0, 200) + '...');
+            }
+
             return this._normalize(infoRes.data, trackingNumber);
         } catch (err) {
-            console.error(`[17Track] Error tracking ${trackingNumber}:`, err.message);
+            console.error(`[17Track] Error tracking ${trackingNumber}:`, err.response?.data || err.message);
             return null;
         }
     }
