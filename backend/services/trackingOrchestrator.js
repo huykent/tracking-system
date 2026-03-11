@@ -151,10 +151,10 @@ async function saveTrackingResult(result) {
 }
 
 /**
- * Detect carrier using API providers (fallback to local regex)
+ * Detect carrier using API providers (only if local regex returns unknown)
  */
 async function detectShipment(trackingNumber) {
-    // 1. Try local regex first for speed
+    // Local regex is now disabled (always returns unknown) to force API usage
     const local = detectCarrier(trackingNumber);
     if (local && local.name !== 'unknown') return local;
 
@@ -164,9 +164,14 @@ async function detectShipment(trackingNumber) {
         const provider = buildProvider(providerRow);
         if (provider && typeof provider.detectCourier === 'function') {
             try {
-                const code = await provider.detectCourier(trackingNumber);
-                if (code) {
-                    return { name: code, label: code, carrierKey: 0 };
+                const detected = await provider.detectCourier(trackingNumber);
+                if (detected) {
+                    // Normalize the response to match our internal format
+                    return {
+                        name: detected.courier_code,
+                        label: detected.courier_name || detected.courier_code,
+                        carrierKey: 0
+                    };
                 }
             } catch (err) {
                 console.warn(`[Orchestrator] Detection failed for ${providerRow.name}:`, err.message);

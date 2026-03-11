@@ -49,20 +49,22 @@ class TrackingMoreProvider {
             const couriers = res.data?.data || [];
             if (couriers.length === 0) return null;
 
+            let selected = couriers[0];
+
             // INTELLIGENT MATCHING: YT numbers are often YTO or YunExpress
             if (tn.startsWith('YT')) {
                 const preference = ['yto', 'yunexpress'];
                 const match = couriers.find(c => preference.includes(c.courier_code));
-                if (match) return match.courier_code;
-            }
-
-            if (tn.startsWith('JDK')) {
+                if (match) selected = match;
+            } else if (tn.startsWith('JDK')) {
                 const match = couriers.find(c => c.courier_code.includes('jd'));
-                if (match) return match.courier_code;
+                if (match) selected = match;
             }
 
-            // Fallback to highest confidence
-            return couriers[0]?.courier_code || null;
+            return {
+                courier_code: selected.courier_code,
+                courier_name: selected.courier_name
+            };
         } catch (err) {
             console.warn(`[TrackingMore] Detect failed:`, err.response?.data?.meta?.message || err.message);
             return null;
@@ -74,8 +76,11 @@ class TrackingMoreProvider {
         try {
             // 1. Resolve Courier
             let courierCode = this._getCarrierCode(carrierName);
+            let detectedData = null;
+
             if (!courierCode) {
-                courierCode = await this.detectCourier(tn);
+                detectedData = await this.detectCourier(tn);
+                if (detectedData) courierCode = detectedData.courier_code;
             }
 
             // 2. Sync to TM
@@ -104,7 +109,6 @@ class TrackingMoreProvider {
             }
 
             // 3. Guarantee Result Detail
-            // If create didn't return full object or it's missing events, fetch fresh
             const item = this._extractItem(trackingData, tn);
             if (!item || !item.origin_info || !item.delivery_status) {
                 const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`;
