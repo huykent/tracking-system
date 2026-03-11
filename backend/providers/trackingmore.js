@@ -78,34 +78,37 @@ class TrackingMoreProvider {
 
     async detectCourier(trackingNumber) {
         try {
+            // Clean payload: TrackingMore is strict about JSON format
+            const payload = { tracking_number: String(trackingNumber).trim() };
+
             const res = await axios.post(
                 'https://api.trackingmore.com/v4/couriers/detect',
-                { tracking_number: trackingNumber },
+                payload,
                 { headers: this._headers(), timeout: 10000 }
             );
-            // Return first suggested courier code
+
             const detected = res.data?.data?.[0]?.courier_code;
-            if (detected) console.log(`[TrackingMore] Detected courier for ${trackingNumber}: ${detected}`);
+            if (detected) console.log(`[TrackingMore] Detected: ${detected} for ${trackingNumber}`);
             return detected || null;
         } catch (err) {
-            console.warn(`[TrackingMore] Detection failed for ${trackingNumber}:`, err.message);
+            console.warn(`[TrackingMore] Detect failed:`, err.response?.data?.meta || err.message);
             return null;
         }
     }
 
     async track(trackingNumber, carrierName) {
+        const tn = String(trackingNumber).trim();
         try {
-            // 1. Detect Carrier (Step 1)
+            // 1. Step 1: Detect
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
-                courierCode = await this.detectCourier(trackingNumber);
+                courierCode = await this.detectCourier(tn);
             }
 
-            // 2. Create Tracking (Step 2)
-            const createPayload = {
-                tracking_number: trackingNumber,
-                courier_code: courierCode || undefined
-            };
+            // 2. Step 2: Create (Sync)
+            // Use only essential fields to avoid 4130
+            const createPayload = { tracking_number: tn };
+            if (courierCode) createPayload.courier_code = courierCode;
 
             let trackingData = null;
             try {
@@ -114,24 +117,23 @@ class TrackingMoreProvider {
                     createPayload,
                     { headers: this._headers(), timeout: 10000 }
                 );
-                // TM v4 /create returns 200 and data if successful
                 if (createRes.data?.meta?.code === 200) {
                     trackingData = createRes.data;
-                    console.log(`[TrackingMore] Tracking created/synced for ${trackingNumber}`);
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
-                // 4101 = Tracking already exists
                 if (meta?.code === 4101) {
-                    console.log(`[TrackingMore] ${trackingNumber} already in system`);
+                    // Already exists, this is fine
                 } else {
-                    console.warn(`[TrackingMore] Sync error:`, meta?.message || e.message);
+                    console.warn(`[TrackingMore] Create error for ${tn}:`, meta || e.message);
                 }
             }
 
-            // 3. Get Status (Step 3) - standard plural query as requested
-            if (!trackingData || !this._extractItem(trackingData, trackingNumber)?.origin_info) {
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+            // 3. Step 3: Get Status
+            // If we don't have results yet, fetch them
+            if (!trackingData || !this._extractItem(trackingData, tn)?.origin_info) {
+                // Use plural GET as requested: /v4/trackings/get?tracking_numbers=...
+                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`;
                 console.log(`[TrackingMore] Fetching: ${reqUrl}`);
 
                 const res = await axios.get(reqUrl, {
@@ -142,11 +144,11 @@ class TrackingMoreProvider {
             }
 
             await logApiCall({
-                trackingNumber, provider: this.name, requestUrl: 'API-Lifecycle', requestMethod: 'POST/GET',
+                trackingNumber: tn, provider: this.name, requestUrl: 'API-v4', requestMethod: 'STAGES',
                 requestPayload: createPayload, responseStatus: 200, responsePayload: trackingData
             });
 
-            return this._normalize(trackingData, trackingNumber);
+            return this._normalize(trackingData, tn);
         } catch (err) {
             const errorData = err.response?.data;
             console.error(`[TrackingMore] lifecycle failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
