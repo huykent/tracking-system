@@ -52,12 +52,12 @@ class TrackingMoreProvider {
 
             let selected = couriers[0];
 
-            // INTELLIGENT MATCHING: YT numbers are often YTO or YunExpress
+            // YT numbers priority (mostly YTO or YunExpress)
             if (tn.startsWith('YT')) {
                 const preference = ['yto', 'yunexpress'];
                 const match = couriers.find(c => preference.includes(c.courier_code.toLowerCase()));
                 if (match) {
-                    console.log(`[TrackingMore] Matched YT preference: ${match.courier_code}`);
+                    console.log(`[TrackingMore] Preferring ${match.courier_code} over ${selected.courier_code}`);
                     selected = match;
                 }
             } else if (tn.startsWith('JDK')) {

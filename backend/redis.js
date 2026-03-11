@@ -26,8 +26,13 @@ async function setCache(key, value, ttlSeconds = 300) {
 
 /** Get cached value */
 async function getCache(key) {
-    const val = await redis.get(`tracking:${key}`);
-    return val ? JSON.parse(val) : null;
+    try {
+        const val = await redis.get(`tracking:${key}`);
+        return val ? JSON.parse(val) : null;
+    } catch (err) {
+        console.warn(`[Redis] Parse error for key ${key}:`, err.message);
+        return null;
+    }
 }
 
 /** Delete cached value */
