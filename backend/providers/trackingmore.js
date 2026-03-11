@@ -100,7 +100,7 @@ class TrackingMoreProvider {
             });
 
             // Step 2: Get tracking info — only tracking_number needed, courier already stored by TrackingMore
-            const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+            const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
 
             const res = await axios.get(reqUrl, {
                 headers: this._headers(),
