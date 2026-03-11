@@ -82,20 +82,25 @@ class TrackingMoreProvider {
     async detectCourier(trackingNumber) {
         try {
             const tn = String(trackingNumber).trim();
-            // Manual clean JSON string
-            const data = `{"tracking_number":"${tn}"}`;
-
             const res = await axios({
                 method: 'POST',
                 url: 'https://api.trackingmore.com/v4/couriers/detect',
                 headers: this._headers(),
-                data: data,
+                data: `{"tracking_number":"${tn}"}`,
                 timeout: 10000
             });
 
-            const first = res.data?.data?.[0]?.courier_code;
-            if (first) console.log(`[TrackingMore] Detected ${first} for ${tn}`);
-            return first || null;
+            const couriers = res.data?.data || [];
+            if (couriers.length === 0) return null;
+
+            // SPECIAL LOGIC: YT prefixes are almost always YunExpress
+            // If TM suggests multiple including GHN/YunExpress, prioritize YunExpress
+            if (tn.startsWith('YT')) {
+                const yun = couriers.find(c => c.courier_code === 'yunexpress');
+                if (yun) return yun.courier_code;
+            }
+
+            return couriers[0]?.courier_code || null;
         } catch (err) {
             console.warn(`[TrackingMore] Detect failed:`, err.response?.data?.meta?.message || err.message);
             return null;
@@ -111,11 +116,10 @@ class TrackingMoreProvider {
                 courierCode = await this.detectCourier(tn);
             }
 
-            // STEP 2: Sync via CREATE (more reliable for single tracking than batch in some TM accounts)
+            // STEP 2: Sync via CREATE
             let trackingData = null;
             let payloadStr = '';
             try {
-                // Construct clean payload string manually to avoid any "hidden" field issues
                 payloadStr = `{"tracking_number":"${tn}"`;
                 if (courierCode) payloadStr += `,"courier_code":"${courierCode}"`;
                 payloadStr += `}`;
@@ -130,18 +134,15 @@ class TrackingMoreProvider {
 
                 if (res.data?.meta?.code === 200 || res.data?.meta?.code === 4101) {
                     trackingData = res.data;
-                    console.log(`[TrackingMore] Sync successful for ${tn}`);
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
-                if (meta?.code === 4101) {
-                    // Logic handles this below by fetching if needed
-                } else {
+                if (meta?.code !== 4101) {
                     console.warn(`[TrackingMore] Sync error:`, meta?.message || e.message);
                 }
             }
 
-            // STEP 3: Get Status (using plural GET as requested)
+            // STEP 3: Get Status
             if (!trackingData || !this._extractItem(trackingData, tn)?.origin_info) {
                 const res = await axios({
                     method: 'GET',
@@ -163,7 +164,7 @@ class TrackingMoreProvider {
             console.error(`[TrackingMore] Request failed for ${tn}:`, JSON.stringify(errorData || err.message));
 
             await logApiCall({
-                trackingNumber: tn, provider: this.name, requestUrl: 'API', requestMethod: 'STAGES',
+                trackingNumber: tn, provider: this.name, requestUrl: 'API-v4-Lifecycle', requestMethod: 'STAGES',
                 errorMessage: err.message, responseStatus: err.response?.status, responsePayload: errorData
             });
             return null;
@@ -175,20 +176,15 @@ class TrackingMoreProvider {
      */
     _extractItem(data, trackingNumber) {
         if (!data?.data) return null;
-        if (Array.isArray(data.data)) {
-            return data.data.find(d => d && d.tracking_number === trackingNumber);
-        }
-        if (data.data.tracking_number === trackingNumber) {
-            return data.data;
-        }
-        return null;
+        const list = Array.isArray(data.data) ? data.data : [data.data];
+        return list.find(d => d && d.tracking_number === trackingNumber);
     }
 
     _normalize(data, trackingNumber) {
         const item = this._extractItem(data, trackingNumber);
         if (!item) return null;
 
-        console.log(`[TrackingMore] Normalizing ${trackingNumber}, Courier in API: ${item.courier_code}`);
+        console.log(`[TrackingMore] Normalizing ${trackingNumber}, API Carrier: ${item.courier_code} (${item.courier_name || 'N/A'})`);
 
         /**
          * TrackingMore status values:
@@ -200,17 +196,15 @@ class TrackingMoreProvider {
 
         if (tmStatus === 'delivered') delivery_status = 'delivered';
         else if (['in_transit', 'picking', 'out_for_delivery', 'info_received'].includes(tmStatus)) delivery_status = 'delivering';
-        else if (['failed_attempt', 'exception', 'expired'].includes(tmStatus)) delivery_status = 'failed';
-        else if (['returning', 'returned'].includes(tmStatus)) delivery_status = 'failed';
+        else if (['failed_attempt', 'exception', 'expired', 'returning', 'returned'].includes(tmStatus)) delivery_status = 'failed';
         else if (tmStatus && tmStatus !== 'pending') delivery_status = 'delivering';
 
         // Collect events from origin_info and destination_info
         const events = [];
         const originTrack = item.origin_info?.trackinfo || [];
         const destTrack = item.destination_info?.trackinfo || [];
-        const allEvents = [...originTrack, ...destTrack];
 
-        for (const e of allEvents) {
+        for (const e of [...originTrack, ...destTrack]) {
             events.push({
                 event_time: e.checkpoint_date,
                 status: e.status_description || e.checkpoint_delivery_status,
@@ -225,7 +219,8 @@ class TrackingMoreProvider {
 
         return {
             tracking_number: trackingNumber,
-            carrier: item.courier_code || 'Unknown',
+            // Prefer descriptive name, fallback to code, then Unknown
+            carrier: item.courier_name || item.courier_code || 'Unknown',
             delivery_status,
             events
         };
