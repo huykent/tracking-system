@@ -133,10 +133,16 @@ class TrackingMoreProvider {
 
             // 3. Fetch current status if not already obtained
             if (!trackingData) {
-                // For v4, the standard GET search is /trackings/get?tracking_numbers=...
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
-                console.log(`[TrackingMore] Fetching current status: ${reqUrl}`);
+                // Try RESTful path first if we have the courier code (v4 standard for single)
+                let reqUrl;
+                if (courierCode) {
+                    reqUrl = `https://api.trackingmore.com/v4/trackings/${courierCode}/${trackingNumber}`;
+                } else {
+                    // Fallback to query param plural (official v4 bulk/singular search)
+                    reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+                }
 
+                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
@@ -157,7 +163,19 @@ class TrackingMoreProvider {
 
         } catch (err) {
             const errorData = err.response?.data;
-            console.error(`[TrackingMore] Error tracking ${trackingNumber}:`, errorData || err.message);
+            console.error(`[TrackingMore] Request failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
+
+            // Total fallback for 4130: try the old style singular param just in case
+            if (err.response?.status === 400 && errorData?.meta?.code === 4130) {
+                try {
+                    console.log(`[TrackingMore] 4130 detected, trying singular fallback...`);
+                    const fallbackUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+                    const res = await axios.get(fallbackUrl, { headers: this._headers(), timeout: 10000 });
+                    return this._normalize(res.data, trackingNumber);
+                } catch (e) {
+                    console.error(`[TrackingMore] Singular fallback also failed:`, e.message);
+                }
+            }
 
             await logApiCall({
                 trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET/POST',
