@@ -81,11 +81,31 @@ class TrackingMoreProvider {
         return code || null;
     }
 
+    async detectCourier(trackingNumber) {
+        try {
+            const res = await axios.post(
+                'https://api.trackingmore.com/v4/couriers/detect',
+                { tracking_number: trackingNumber },
+                { headers: this._headers(), timeout: 10000 }
+            );
+            return res.data?.data?.[0]?.courier_code || null;
+        } catch (err) {
+            console.warn(`[TrackingMore] Detection failed for ${trackingNumber}:`, err.message);
+            return null;
+        }
+    }
+
     async track(trackingNumber, carrierName) {
         try {
-            const courierCode = this._getCarrierCode(carrierName);
+            let courierCode = this._getCarrierCode(carrierName);
 
-            // Step 1: Create tracking (omit courier_code if unknown — let TM auto-detect)
+            // If local detection fails, use TrackingMore API detection
+            if (!courierCode) {
+                console.log(`[TrackingMore] Local mapping unknown for "${carrierName}", calling API detection...`);
+                courierCode = await this.detectCourier(trackingNumber);
+            }
+
+            // Step 1: Create tracking
             const createPayload = { tracking_number: trackingNumber };
             if (courierCode) createPayload.courier_code = courierCode;
 
