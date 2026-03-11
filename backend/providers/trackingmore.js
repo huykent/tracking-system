@@ -42,6 +42,7 @@ class TrackingMoreProvider {
             baishi: 'best-express', best: 'best-express', bestexpress: 'best-express',
             // J&T Express
             jt: 'jt-express', jtexpress: 'jt-express', jnt: 'jt-express',
+            'jt-vn': 'jtexpress-vn', 'jtexpress-vn': 'jtexpress-vn',
             // Cainiao
             cainiao: 'cainiao',
             // 4PX
