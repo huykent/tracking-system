@@ -22,16 +22,10 @@ class TrackingMoreProvider {
     }
 
     /**
-     * Rely on API detection. We no longer map names locally.
-     * Only returns back clear, known courier codes if already provided.
+     * Rely ENTIRELY on API detection as requested.
+     * We no longer trust or use the carrier name stored in DB for TrackingMore.
      */
     _getCarrierCode(carrierName) {
-        if (!carrierName || String(carrierName).toLowerCase() === 'unknown') return null;
-        // If it looks like a clean code (no spaces, lowercase), we try to use it
-        const clean = String(carrierName).toLowerCase().trim();
-        if (/^[a-z0-9\-]+$/.test(clean) && clean.length < 20) {
-            return clean;
-        }
         return null;
     }
 
@@ -44,7 +38,7 @@ class TrackingMoreProvider {
                 method: 'POST',
                 url: 'https://api.trackingmore.com/v4/couriers/detect',
                 headers: this._headers(),
-                data: { tracking_number: tn }, // Clean object
+                data: { tracking_number: tn },
                 timeout: 10000
             });
 
@@ -86,14 +80,9 @@ class TrackingMoreProvider {
     async track(trackingNumber, carrierName) {
         const tn = String(trackingNumber).trim();
         try {
-            // 1. Resolve Courier
-            let courierCode = this._getCarrierCode(carrierName);
-            let detectedData = null;
-
-            if (!courierCode) {
-                detectedData = await this.detectCourier(tn);
-                if (detectedData) courierCode = detectedData.courier_code;
-            }
+            // Force re-detection every time for maximum accuracy
+            const detectedData = await this.detectCourier(tn);
+            const courierCode = detectedData?.courier_code || null;
 
             // 2. Sync to TM
             let trackingData = null;
