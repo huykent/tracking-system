@@ -22,61 +22,17 @@ class TrackingMoreProvider {
     }
 
     /**
-     * Map internal carrier names/labels to TrackingMore courier_code.
-     * Returns null if unknown — caller will omit courier_code for auto-detect.
+     * Rely on API detection. We no longer map names locally.
+     * Only returns back clear, known courier codes if already provided.
      */
     _getCarrierCode(carrierName) {
         if (!carrierName || String(carrierName).toLowerCase() === 'unknown') return null;
-
-        // Normalize: lowercase, strip spaces/hyphens/dots/underscores
-        const key = String(carrierName).toLowerCase().replace(/[\s\-_\.]+/g, '');
-
-        const map = {
-            // SF Express
-            shunfeng: 'sf-express', sfexpress: 'sf-express', sf: 'sf-express',
-            // YTO Express
-            yuantong: 'yto', yto: 'yto', ytoexpress: 'yto',
-            // ZTO Express
-            zhongtong: 'zto', zto: 'zto', ztoexpress: 'zto',
-            // STO Express
-            shentong: 'sto', sto: 'sto', stoexpress: 'sto',
-            // Yunda
-            yunda: 'yunda', yundaexpress: 'yunda',
-            // Best Express
-            baishi: 'best', best: 'best', bestexpress: 'best',
-            // J&T Express
-            jt: 'jt-express', jtexpress: 'jt-express', jnt: 'jt-express',
-            'jt-vn': 'jtexpress-vn', 'jtexpress-vn': 'jtexpress-vn',
-            // Cainiao
-            cainiao: 'cainiao',
-            // 4PX
-            '4px': '4px',
-            // China Post
-            chinapost: 'china-post',
-            // EMS
-            ems: 'china-ems',
-            // Yanwen
-            yanwen: 'yanwen',
-            // International
-            ups: 'ups', fedex: 'fedex', dhl: 'dhl', usps: 'usps',
-            // JD Logistics
-            jd: 'jd-express', jdexpress: 'jd-express',
-            // YunExpress
-            yun: 'yunexpress', yunexpress: 'yunexpress',
-            // Vietnamese Carriers
-            ghn: 'ghn', giaohangnhanh: 'ghn',
-            ghtk: 'ghtk', giaohangtietkiem: 'ghtk',
-            viettel: 'viettel-post', viettelpost: 'viettel-post', vtpl: 'viettel-post',
-            vnpost: 'vietnam-post', vietnampost: 'vietnam-post',
-            ninjavan: 'ninjavan', ninja: 'ninjavan',
-            lalamove: 'lalamove', grab: 'grab-express',
-        };
-
-        const code = map[key];
-        if (!code) {
-            console.warn(`[TrackingMore] No local mapping for: "${carrierName}"`);
+        // If it looks like a clean code (no spaces, lowercase), we try to use it
+        const clean = String(carrierName).toLowerCase().trim();
+        if (/^[a-z0-9\-]+$/.test(clean) && clean.length < 20) {
+            return clean;
         }
-        return code || null;
+        return null;
     }
 
     async detectCourier(trackingNumber) {

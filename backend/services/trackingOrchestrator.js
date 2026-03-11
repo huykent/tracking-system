@@ -150,4 +150,31 @@ async function saveTrackingResult(result) {
     return { hasNewEvent, statusChanged, latestEvent };
 }
 
-module.exports = { trackShipment, saveTrackingResult, getAvailableProviders };
+/**
+ * Detect carrier using API providers (fallback to local regex)
+ */
+async function detectShipment(trackingNumber) {
+    // 1. Try local regex first for speed
+    const local = detectCarrier(trackingNumber);
+    if (local && local.name !== 'unknown') return local;
+
+    // 2. Local failed, try APIs
+    const providers = await getAvailableProviders();
+    for (const providerRow of providers) {
+        const provider = buildProvider(providerRow);
+        if (provider && typeof provider.detectCourier === 'function') {
+            try {
+                const code = await provider.detectCourier(trackingNumber);
+                if (code) {
+                    return { name: code, label: code, carrierKey: 0 };
+                }
+            } catch (err) {
+                console.warn(`[Orchestrator] Detection failed for ${providerRow.name}:`, err.message);
+            }
+        }
+    }
+
+    return local; // finally return unknown if all fail
+}
+
+module.exports = { trackShipment, saveTrackingResult, getAvailableProviders, detectShipment };

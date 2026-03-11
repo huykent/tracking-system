@@ -84,8 +84,9 @@ router.post('/', async (req, res) => {
         const { tracking_number, note, source_platform, ship_time } = req.body;
         if (!tracking_number) return res.status(400).json({ error: 'tracking_number is required' });
 
-        // Auto-detect carrier
-        const detected = detectCarrier(tracking_number);
+        // Use async API detection fallback
+        const { detectShipment } = require('../services/trackingOrchestrator');
+        const detected = await detectShipment(tracking_number);
 
         const { rows } = await query(
             `INSERT INTO shipments (tracking_number, carrier, carrier_key, note, source_platform, ship_time)
@@ -109,14 +110,18 @@ router.post('/', async (req, res) => {
 // ─── POST /api/shipments/bulk ─────────────────────────────
 router.post('/bulk', async (req, res) => {
     try {
-        const { numbers } = req.body; // Array of tracking_number strings
+        const { numbers } = req.body;
         if (!Array.isArray(numbers) || numbers.length === 0) {
             return res.status(400).json({ error: 'numbers array is required' });
         }
 
+        const { detectShipment } = require('../services/trackingOrchestrator');
         const results = [];
-        for (const tn of numbers.slice(0, 200)) { // Max 200 per request
-            const detected = detectCarrier(tn);
+
+        // Process in batches or concurrently with a limit if needed, 
+        // but for now simple loop with async detect
+        for (const tn of numbers.slice(0, 200)) {
+            const detected = await detectShipment(tn);
             await query(
                 `INSERT INTO shipments (tracking_number, carrier, carrier_key)
                  VALUES ($1, $2, $3)
