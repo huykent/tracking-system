@@ -131,8 +131,14 @@ class TrackingMoreProvider {
 
             // Step 2: Get tracking info if not obtained from create
             if (!trackingData) {
-                let reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
-                if (courierCode) reqUrl += `&courier_code=${courierCode}`;
+                // Try RESTful path first if we have the courier code
+                let reqUrl;
+                if (courierCode) {
+                    reqUrl = `https://api.trackingmore.com/v4/trackings/${courierCode}/${trackingNumber}`;
+                } else {
+                    // Fallback to query param if no courier code
+                    reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+                }
 
                 console.log(`[TrackingMore] Fetching: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
@@ -155,6 +161,18 @@ class TrackingMoreProvider {
         } catch (err) {
             const errorData = err.response?.data;
             console.error(`[TrackingMore] Error tracking ${trackingNumber}:`, errorData || err.message);
+
+            // If it's a 4130, let's try the other GET variant as total fallback
+            if (err.response?.status === 400 && errorData?.meta?.code === 4130 && !trackingNumber.includes('get?')) {
+                try {
+                    console.log(`[TrackingMore] 4130 detected, trying query param singular fallback...`);
+                    const fallbackUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+                    const res = await axios.get(fallbackUrl, { headers: this._headers(), timeout: 10000 });
+                    return this._normalize(res.data, trackingNumber);
+                } catch (e) {
+                    console.error(`[TrackingMore] Fallback failed:`, e.message);
+                }
+            }
 
             await logApiCall({
                 trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET',
