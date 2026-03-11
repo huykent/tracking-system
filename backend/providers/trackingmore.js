@@ -54,29 +54,23 @@ class TrackingMoreProvider {
             // Yanwen
             yanwen: 'yanwen',
             // International
-            ups: 'ups',
-            fedex: 'fedex',
-            dhl: 'dhl',
+            ups: 'ups', fedex: 'fedex', dhl: 'dhl', usps: 'usps',
             // JD Logistics
-            jd: 'jd-logistics', jdexpress: 'jd-logistics', jdlogistics: 'jd-logistics',
+            jd: 'jd-express', jdexpress: 'jd-express',
             // YunExpress
             yunexpress: 'yunexpress',
-            // USPS
-            usps: 'usps',
             // Vietnamese Carriers
             ghn: 'ghn', giaohangnhanh: 'ghn',
             ghtk: 'ghtk', giaohangtietkiem: 'ghtk',
             viettel: 'viettel-post', viettelpost: 'viettel-post', vtpl: 'viettel-post',
             vnpost: 'vietnam-post', vietnampost: 'vietnam-post',
             ninjavan: 'ninjavan', ninja: 'ninjavan',
-            lalamove: 'lalamove',
-            grab: 'grab-express', grabexpress: 'grab-express',
-            snappy: 'snappy',
+            lalamove: 'lalamove', grab: 'grab-express',
         };
 
         const code = map[key];
         if (!code) {
-            console.warn(`[TrackingMore] Unknown carrier: "${carrierName}" (key: "${key}") — will let TrackingMore auto-detect`);
+            console.warn(`[TrackingMore] Unknown carrier: "${carrierName}" (key: "${key}") — will let auto-detect`);
         }
         return code || null;
     }
@@ -100,18 +94,14 @@ class TrackingMoreProvider {
             // 1. Determine courier code
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
-                console.log(`[TrackingMore] Local mapping unknown for "${carrierName}", detecting...`);
                 courierCode = await this.detectCourier(trackingNumber);
-                console.log(`[TrackingMore] Detected courier: ${courierCode}`);
             }
 
-            // 2. Create tracking (using BATCH as requested - handles one or more)
+            // 2. Create tracking (using BATCH for one or more)
             const batchPayload = [{
                 tracking_number: trackingNumber,
                 courier_code: courierCode || undefined
             }];
-
-            console.log(`[TrackingMore] Syncing tracking via batch:`, JSON.stringify(batchPayload));
 
             let trackingData = null;
             try {
@@ -121,28 +111,20 @@ class TrackingMoreProvider {
                     { headers: this._headers(), timeout: 10000 }
                 );
 
-                // If the batch response contains the item data, use it
-                const item = res.data?.data?.[0];
-                if (item && item.tracking_number === trackingNumber) {
+                if (res.data?.data?.[0]) {
                     trackingData = res.data;
                 }
             } catch (e) {
-                // If batch fails, we'll try GET next (might already exist)
-                console.warn(`[TrackingMore] Batch create warning:`, e.response?.data?.meta || e.message);
+                console.warn(`[TrackingMore] Batch create warning for ${trackingNumber}`);
             }
 
-            // 3. Fetch current status if not already obtained
+            // 3. Fetch current status
             if (!trackingData) {
-                // Try RESTful path first if we have the courier code (v4 standard for single)
-                let reqUrl;
-                if (courierCode) {
-                    reqUrl = `https://api.trackingmore.com/v4/trackings/${courierCode}/${trackingNumber}`;
-                } else {
-                    // Fallback to query param plural (official v4 bulk/singular search)
-                    reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
-                }
-
+                // Official v4 recommended GET: /trackings/get?tracking_numbers=...
+                // Removed courier_code from query as it might cause 4130 "Invalid field name"
+                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
                 console.log(`[TrackingMore] Fetching: ${reqUrl}`);
+
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
