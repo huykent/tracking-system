@@ -104,8 +104,8 @@ router.post('/', async (req, res) => {
 
         res.status(201).json({ shipment: rows[0], carrier_detected: detected });
     } catch (err) {
-        console.error('/shipments POST error:', err.message);
-        res.status(500).json({ error: err.message });
+        console.error('/shipments POST error:', err);
+        res.status(500).json({ error: err.message, stack: err.stack });
     }
 });
 
