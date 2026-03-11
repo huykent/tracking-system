@@ -13,6 +13,7 @@ class TrackingMoreProvider {
     _headers() {
         return {
             'Tracking-Api-Key': this.apiKey,
+            'Accept': 'application/json',
             'Content-Type': 'application/json',
         };
     }
@@ -22,7 +23,7 @@ class TrackingMoreProvider {
      * Returns null if unknown — caller will omit courier_code for auto-detect.
      */
     _getCarrierCode(carrierName) {
-        if (!carrierName) return null;
+        if (!carrierName || carrierName.toLowerCase() === 'unknown') return null;
 
         // Normalize: lowercase, strip spaces/hyphens/dots/underscores
         const key = String(carrierName).toLowerCase().replace(/[\s\-_\.]+/g, '');
@@ -83,7 +84,9 @@ class TrackingMoreProvider {
                 { headers: this._headers(), timeout: 10000 }
             );
             // Return first suggested courier code
-            return res.data?.data?.[0]?.courier_code || null;
+            const detected = res.data?.data?.[0]?.courier_code;
+            if (detected) console.log(`[TrackingMore] Detected courier for ${trackingNumber}: ${detected}`);
+            return detected || null;
         } catch (err) {
             console.warn(`[TrackingMore] Detection failed for ${trackingNumber}:`, err.message);
             return null;
@@ -95,12 +98,7 @@ class TrackingMoreProvider {
             // 1. Detect Carrier (Step 1)
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
-                console.log(`[TrackingMore] Step 1: Detecting carrier for ${trackingNumber}...`);
                 courierCode = await this.detectCourier(trackingNumber);
-            }
-
-            if (!courierCode) {
-                console.warn(`[TrackingMore] Could not detect courier for ${trackingNumber}, will attempt auto-detect create`);
             }
 
             // 2. Create Tracking (Step 2)
@@ -108,8 +106,6 @@ class TrackingMoreProvider {
                 tracking_number: trackingNumber,
                 courier_code: courierCode || undefined
             };
-
-            console.log(`[TrackingMore] Step 2: Syncing tracking for ${trackingNumber}...`);
 
             let trackingData = null;
             try {
@@ -121,36 +117,23 @@ class TrackingMoreProvider {
                 // TM v4 /create returns 200 and data if successful
                 if (createRes.data?.meta?.code === 200) {
                     trackingData = createRes.data;
-                    console.log(`[TrackingMore] Create successful for ${trackingNumber}`);
+                    console.log(`[TrackingMore] Tracking created/synced for ${trackingNumber}`);
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
                 // 4101 = Tracking already exists
                 if (meta?.code === 4101) {
-                    console.log(`[TrackingMore] ${trackingNumber} already exists, getting info...`);
+                    console.log(`[TrackingMore] ${trackingNumber} already in system`);
                 } else {
-                    console.warn(`[TrackingMore] Create error:`, meta?.message || e.message);
+                    console.warn(`[TrackingMore] Sync error:`, meta?.message || e.message);
                 }
             }
 
-            // 3. Get Tracking Info (Step 3)
-            // Use RESTful path: /v4/trackings/{courier_code}/{tracking_number}
+            // 3. Get Status (Step 3) - standard plural query as requested
             if (!trackingData || !this._extractItem(trackingData, trackingNumber)?.origin_info) {
-                if (!courierCode) {
-                    // If we still don't have a courier code, we must try to detect it or use bulk get
-                    courierCode = await this.detectCourier(trackingNumber);
-                }
+                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
 
-                let reqUrl;
-                if (courierCode) {
-                    // Official REST path for single tracking
-                    reqUrl = `https://api.trackingmore.com/v4/trackings/${courierCode}/${trackingNumber}`;
-                } else {
-                    // Fallback to query param plural if courier unknown
-                    reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
-                }
-
-                console.log(`[TrackingMore] Step 3: Fetching status from: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
