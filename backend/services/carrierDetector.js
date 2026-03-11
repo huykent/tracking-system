@@ -48,8 +48,14 @@ const CARRIER_RULES = [
     // BEST Express (百世)
     { name: 'best', label: 'BEST Express', regex: /^BX\d{12}$/ },
 
-    // J&T Express
-    { name: 'jt', label: 'J&T Express', regex: /^JT[E]?\d{12}$/ },
+    // J&T Express (Generic starting with JT, JTE etc)
+    { name: 'jt', label: 'J&T Express', regex: /^JT[A-Z]?\d{12}$/i },
+
+    // J&T Express Vietnam (12 digits numeric starting with 8)
+    { name: 'jt-vn', label: 'J&T VN', regex: /^8\d{11}$/ },
+
+    // GHN (Giao Hang Nhanh) - usually letters followed by numbers or 10-12 digits
+    { name: 'ghn', label: 'GHN', regex: /^[A-Z0-9]{8,15}$/i },
 
     // Cainiao (菜鸟)
     { name: 'cainiao', label: 'Cainiao', regex: /^(LP\d{18}|LX\d{9}[A-Z]{2}|CNGZ\d+)$/i },

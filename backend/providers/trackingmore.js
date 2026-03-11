@@ -89,31 +89,42 @@ class TrackingMoreProvider {
             const createPayload = { tracking_number: trackingNumber };
             if (courierCode) createPayload.courier_code = courierCode;
 
-            await axios.post(
-                'https://api.trackingmore.com/v4/trackings/create',
-                createPayload,
-                { headers: this._headers(), timeout: 10000 }
-            ).catch(e => {
-                // Code 4016 = already exists — that's fine
+            let trackingData = null;
+
+            try {
+                const createRes = await axios.post(
+                    'https://api.trackingmore.com/v4/trackings/create',
+                    createPayload,
+                    { headers: this._headers(), timeout: 10000 }
+                );
+
+                // If created successfully, we might already have the data
+                if (createRes.data?.meta?.code === 200 && createRes.data?.data) {
+                    trackingData = createRes.data;
+                }
+            } catch (e) {
+                // Code 4016 = already exists — that's fine, we'll fetch it next
                 if (e.response?.data?.meta?.code !== 4016) {
                     console.warn(`[TrackingMore] Create warning for ${trackingNumber}:`, e.response?.data?.meta?.message || e.message);
                 }
-            });
+            }
 
-            // Step 2: Get tracking info — only tracking_number needed, courier already stored by TrackingMore
-            const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
-
-            const res = await axios.get(reqUrl, {
-                headers: this._headers(),
-                timeout: 10000
-            });
+            // Step 2: Get tracking info if not obtained from create
+            if (!trackingData) {
+                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+                const res = await axios.get(reqUrl, {
+                    headers: this._headers(),
+                    timeout: 10000
+                });
+                trackingData = res.data;
+            }
 
             await logApiCall({
-                trackingNumber, provider: this.name, requestUrl: reqUrl, requestMethod: 'GET',
-                requestPayload: createPayload, responseStatus: res?.status, responsePayload: res?.data
+                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'POST/GET',
+                requestPayload: createPayload, responseStatus: 200, responsePayload: trackingData
             });
 
-            return this._normalize(res.data, trackingNumber);
+            return this._normalize(trackingData, trackingNumber);
         } catch (err) {
             console.error(`[TrackingMore] Error tracking ${trackingNumber}:`, err.response?.data || err.message);
             await logApiCall({
