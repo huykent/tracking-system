@@ -82,6 +82,7 @@ class TrackingMoreProvider {
                 { tracking_number: trackingNumber },
                 { headers: this._headers(), timeout: 10000 }
             );
+            // Return first suggested courier code
             return res.data?.data?.[0]?.courier_code || null;
         } catch (err) {
             console.warn(`[TrackingMore] Detection failed for ${trackingNumber}:`, err.message);
@@ -91,40 +92,54 @@ class TrackingMoreProvider {
 
     async track(trackingNumber, carrierName) {
         try {
-            // 1. Determine courier code
+            // 1. Detect Carrier (Step 1)
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
+                console.log(`[TrackingMore] Step 1: Detecting carrier for ${trackingNumber}...`);
                 courierCode = await this.detectCourier(trackingNumber);
             }
 
-            // 2. Create tracking (using BATCH array as standard in v4)
-            const batchPayload = [{
+            if (!courierCode) {
+                console.warn(`[TrackingMore] Could not detect courier for ${trackingNumber}`);
+                // Proceed anyway, TM might auto-detect in create
+            }
+
+            // 2. Create Tracking (Step 2)
+            const createPayload = {
                 tracking_number: trackingNumber,
                 courier_code: courierCode || undefined
-            }];
+            };
+
+            console.log(`[TrackingMore] Step 2: Creating tracking for ${trackingNumber} (${courierCode || 'auto-detect'})...`);
 
             let trackingData = null;
             try {
-                const res = await axios.post(
-                    'https://api.trackingmore.com/v4/trackings/batch',
-                    batchPayload,
+                const createRes = await axios.post(
+                    'https://api.trackingmore.com/v4/trackings/create',
+                    createPayload,
                     { headers: this._headers(), timeout: 10000 }
                 );
-
-                if (res.data?.data?.[0]) {
-                    trackingData = res.data;
+                // TM v4 /create returns 200 and data if successful
+                if (createRes.data?.meta?.code === 200) {
+                    trackingData = createRes.data;
                 }
             } catch (e) {
-                console.warn(`[TrackingMore] Batch create warning for ${trackingNumber}`);
+                const meta = e.response?.data?.meta;
+                // 4101 = Tracking already exists (standard for v4)
+                if (meta?.code === 4101) {
+                    console.log(`[TrackingMore] ${trackingNumber} already exists, fetching status...`);
+                } else {
+                    console.warn(`[TrackingMore] Create failed:`, meta?.message || e.message);
+                }
             }
 
-            // 3. Fetch current status
-            if (!trackingData) {
-                // Official v4 GET Single: /trackings/get?tracking_number=...&courier_code=...
+            // 3. Get Tracking Info (Step 3) - Only if create didn't provide full status
+            if (!trackingData || !trackingData.data?.origin_info) {
+                // v4 single search: /trackings/get?tracking_number=...&courier_code=...
                 let reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
                 if (courierCode) reqUrl += `&courier_code=${courierCode}`;
 
-                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
+                console.log(`[TrackingMore] Step 3: Fetching status: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
@@ -134,33 +149,16 @@ class TrackingMoreProvider {
 
             await logApiCall({
                 trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'TrackingMore-v4',
-                requestPayload: batchPayload, responseStatus: 200, responsePayload: trackingData
+                requestPayload: createPayload, responseStatus: 200, responsePayload: trackingData
             });
 
-            const normalized = this._normalize(trackingData, trackingNumber);
-            if (normalized && normalized.events.length === 0 && !normalized.delivery_status) {
-                console.log(`[TrackingMore] ${trackingNumber} has no status yet (pending)`);
-            }
-            return normalized;
-
+            return this._normalize(trackingData, trackingNumber);
         } catch (err) {
             const errorData = err.response?.data;
-            console.error(`[TrackingMore] Request failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
-
-            // Total fallback for 4130: try the old style singular param just in case
-            if (err.response?.status === 400 && errorData?.meta?.code === 4130) {
-                try {
-                    console.log(`[TrackingMore] 4130 detected, trying singular fallback...`);
-                    const fallbackUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
-                    const res = await axios.get(fallbackUrl, { headers: this._headers(), timeout: 10000 });
-                    return this._normalize(res.data, trackingNumber);
-                } catch (e) {
-                    console.error(`[TrackingMore] Singular fallback also failed:`, e.message);
-                }
-            }
+            console.error(`[TrackingMore] Lifecycle failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
 
             await logApiCall({
-                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET/POST',
+                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'POST/GET',
                 errorMessage: err.message, responseStatus: err.response?.status, responsePayload: errorData
             });
             return null;
