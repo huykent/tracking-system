@@ -37,29 +37,41 @@ class TrackingMoreProvider {
 
     async detectCourier(trackingNumber) {
         try {
-            const tn = String(trackingNumber).trim();
+            const tn = String(trackingNumber).trim().toUpperCase();
+            console.log(`[TrackingMore] Detecting ${tn}...`);
+
             const res = await axios({
                 method: 'POST',
                 url: 'https://api.trackingmore.com/v4/couriers/detect',
                 headers: this._headers(),
-                data: `{"tracking_number":"${tn}"}`,
+                data: { tracking_number: tn }, // Clean object
                 timeout: 10000
             });
 
             const couriers = res.data?.data || [];
-            if (couriers.length === 0) return null;
+            if (couriers.length === 0) {
+                console.log(`[TrackingMore] No couriers detected for ${tn}`);
+                return null;
+            }
+
+            console.log(`[TrackingMore] Candidates for ${tn}:`, couriers.map(c => c.courier_code).join(', '));
 
             let selected = couriers[0];
 
             // INTELLIGENT MATCHING: YT numbers are often YTO or YunExpress
             if (tn.startsWith('YT')) {
                 const preference = ['yto', 'yunexpress'];
-                const match = couriers.find(c => preference.includes(c.courier_code));
-                if (match) selected = match;
+                const match = couriers.find(c => preference.includes(c.courier_code.toLowerCase()));
+                if (match) {
+                    console.log(`[TrackingMore] Matched YT preference: ${match.courier_code}`);
+                    selected = match;
+                }
             } else if (tn.startsWith('JDK')) {
-                const match = couriers.find(c => c.courier_code.includes('jd'));
+                const match = couriers.find(c => c.courier_code.toLowerCase().includes('jd'));
                 if (match) selected = match;
             }
+
+            console.log(`[TrackingMore] Selected: ${selected.courier_code} (${selected.courier_name})`);
 
             return {
                 courier_code: selected.courier_code,
