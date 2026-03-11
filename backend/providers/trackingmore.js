@@ -188,6 +188,8 @@ class TrackingMoreProvider {
         const item = this._extractItem(data, trackingNumber);
         if (!item) return null;
 
+        console.log(`[TrackingMore] Normalizing ${trackingNumber}, Courier in API: ${item.courier_code}`);
+
         /**
          * TrackingMore status values:
          * pending, info_received, in_transit, picking, out_for_delivery,
