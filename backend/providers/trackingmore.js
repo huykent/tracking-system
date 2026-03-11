@@ -97,7 +97,7 @@ class TrackingMoreProvider {
                 courierCode = await this.detectCourier(trackingNumber);
             }
 
-            // 2. Create tracking (using BATCH for one or more)
+            // 2. Create tracking (using BATCH array as standard in v4)
             const batchPayload = [{
                 tracking_number: trackingNumber,
                 courier_code: courierCode || undefined
@@ -120,11 +120,11 @@ class TrackingMoreProvider {
 
             // 3. Fetch current status
             if (!trackingData) {
-                // Official v4 recommended GET: /trackings/get?tracking_numbers=...
-                // Removed courier_code from query as it might cause 4130 "Invalid field name"
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
-                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
+                // Official v4 GET Single: /trackings/get?tracking_number=...&courier_code=...
+                let reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+                if (courierCode) reqUrl += `&courier_code=${courierCode}`;
 
+                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
