@@ -23,7 +23,7 @@ class TrackingMoreProvider {
      * Returns null if unknown — caller will omit courier_code for auto-detect.
      */
     _getCarrierCode(carrierName) {
-        if (!carrierName || carrierName.toLowerCase() === 'unknown') return null;
+        if (!carrierName || String(carrierName).toLowerCase() === 'unknown') return null;
 
         // Normalize: lowercase, strip spaces/hyphens/dots/underscores
         const key = String(carrierName).toLowerCase().replace(/[\s\-_\.]+/g, '');
@@ -71,27 +71,27 @@ class TrackingMoreProvider {
 
         const code = map[key];
         if (!code) {
-            console.warn(`[TrackingMore] Unknown carrier: "${carrierName}" (key: "${key}") — will let auto-detect`);
+            console.warn(`[TrackingMore] No local mapping for: "${carrierName}"`);
         }
         return code || null;
     }
 
     async detectCourier(trackingNumber) {
         try {
-            // Clean payload: TrackingMore is strict about JSON format
-            const payload = { tracking_number: String(trackingNumber).trim() };
+            const tn = String(trackingNumber).trim();
+            const res = await axios({
+                method: 'POST',
+                url: 'https://api.trackingmore.com/v4/couriers/detect',
+                headers: this._headers(),
+                data: JSON.stringify({ tracking_number: tn }),
+                timeout: 10000
+            });
 
-            const res = await axios.post(
-                'https://api.trackingmore.com/v4/couriers/detect',
-                payload,
-                { headers: this._headers(), timeout: 10000 }
-            );
-
-            const detected = res.data?.data?.[0]?.courier_code;
-            if (detected) console.log(`[TrackingMore] Detected: ${detected} for ${trackingNumber}`);
-            return detected || null;
+            const first = res.data?.data?.[0]?.courier_code;
+            if (first) console.log(`[TrackingMore] Detected ${first} for ${tn}`);
+            return first || null;
         } catch (err) {
-            console.warn(`[TrackingMore] Detect failed:`, err.response?.data?.meta || err.message);
+            console.warn(`[TrackingMore] Detect failed:`, err.response?.data?.meta?.message || err.message);
             return null;
         }
     }
@@ -99,44 +99,44 @@ class TrackingMoreProvider {
     async track(trackingNumber, carrierName) {
         const tn = String(trackingNumber).trim();
         try {
-            // 1. Step 1: Detect
+            // Step 1: Detect
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
                 courierCode = await this.detectCourier(tn);
             }
 
-            // 2. Step 2: Create (Sync)
-            // Use only essential fields to avoid 4130
+            // Step 2: Create (Sync)
             const createPayload = { tracking_number: tn };
             if (courierCode) createPayload.courier_code = courierCode;
 
             let trackingData = null;
             try {
-                const createRes = await axios.post(
-                    'https://api.trackingmore.com/v4/trackings/create',
-                    createPayload,
-                    { headers: this._headers(), timeout: 10000 }
-                );
-                if (createRes.data?.meta?.code === 200) {
-                    trackingData = createRes.data;
+                const res = await axios({
+                    method: 'POST',
+                    url: 'https://api.trackingmore.com/v4/trackings/create',
+                    headers: this._headers(),
+                    data: JSON.stringify(createPayload),
+                    timeout: 10000
+                });
+                if (res.data?.meta?.code === 200) {
+                    trackingData = res.data;
+                    console.log(`[TrackingMore] Created OK: ${tn}`);
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
                 if (meta?.code === 4101) {
-                    // Already exists, this is fine
+                    console.log(`[TrackingMore] ${tn} already active`);
                 } else {
-                    console.warn(`[TrackingMore] Create error for ${tn}:`, meta || e.message);
+                    console.warn(`[TrackingMore] Sync error:`, meta?.message || e.message);
                 }
             }
 
-            // 3. Step 3: Get Status
-            // If we don't have results yet, fetch them
+            // Step 3: Get Result
             if (!trackingData || !this._extractItem(trackingData, tn)?.origin_info) {
-                // Use plural GET as requested: /v4/trackings/get?tracking_numbers=...
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`;
-                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
-
-                const res = await axios.get(reqUrl, {
+                // Standard singular GET for v4
+                const res = await axios({
+                    method: 'GET',
+                    url: `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`,
                     headers: this._headers(),
                     timeout: 10000
                 });
