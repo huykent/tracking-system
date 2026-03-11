@@ -35,15 +35,15 @@ class TrackingMoreProvider {
             // SF Express
             shunfeng: 'sf-express', sfexpress: 'sf-express', sf: 'sf-express',
             // YTO Express
-            yuantong: 'yto-express', yto: 'yto-express', ytoexpress: 'yto-express',
+            yuantong: 'yto', yto: 'yto', ytoexpress: 'yto',
             // ZTO Express
-            zhongtong: 'zto-express', zto: 'zto-express', ztoexpress: 'zto-express',
+            zhongtong: 'zto', zto: 'zto', ztoexpress: 'zto',
             // STO Express
-            shentong: 'sto-express', sto: 'sto-express', stoexpress: 'sto-express',
+            shentong: 'sto', sto: 'sto', stoexpress: 'sto',
             // Yunda
-            yunda: 'yunda-express', yundaexpress: 'yunda-express',
+            yunda: 'yunda', yundaexpress: 'yunda',
             // Best Express
-            baishi: 'best-express', best: 'best-express', bestexpress: 'best-express',
+            baishi: 'best', best: 'best', bestexpress: 'best',
             // J&T Express
             jt: 'jt-express', jtexpress: 'jt-express', jnt: 'jt-express',
             'jt-vn': 'jtexpress-vn', 'jtexpress-vn': 'jtexpress-vn',
@@ -62,7 +62,7 @@ class TrackingMoreProvider {
             // JD Logistics
             jd: 'jd-express', jdexpress: 'jd-express',
             // YunExpress
-            yunexpress: 'yunexpress',
+            yun: 'yunexpress', yunexpress: 'yunexpress',
             // Vietnamese Carriers
             ghn: 'ghn', giaohangnhanh: 'ghn',
             ghtk: 'ghtk', giaohangtietkiem: 'ghtk',
@@ -93,11 +93,16 @@ class TrackingMoreProvider {
             const couriers = res.data?.data || [];
             if (couriers.length === 0) return null;
 
-            // SPECIAL LOGIC: YT prefixes are almost always YunExpress
-            // If TM suggests multiple including GHN/YunExpress, prioritize YunExpress
+            // INTELLIGENT PRIORITIZATION: avoid matching local VN carriers for global prefixes
             if (tn.startsWith('YT')) {
-                const yun = couriers.find(c => c.courier_code === 'yunexpress');
-                if (yun) return yun.courier_code;
+                // Prefer YTO or YunExpress for YT numbers
+                const match = couriers.find(c => ['yto', 'yunexpress'].includes(c.courier_code));
+                if (match) return match.courier_code;
+            }
+
+            if (tn.startsWith('JDK')) {
+                const match = couriers.find(c => c.courier_code.includes('jd'));
+                if (match) return match.courier_code;
             }
 
             return couriers[0]?.courier_code || null;
