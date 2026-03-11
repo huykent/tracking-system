@@ -82,12 +82,16 @@ class TrackingMoreProvider {
     async detectCourier(trackingNumber) {
         try {
             const tn = String(trackingNumber).trim();
-            // Pass object directly to axios for standard JSON serialization
-            const res = await axios.post(
-                'https://api.trackingmore.com/v4/couriers/detect',
-                { tracking_number: tn },
-                { headers: this._headers(), timeout: 10000 }
-            );
+            // Manual clean JSON string
+            const data = `{"tracking_number":"${tn}"}`;
+
+            const res = await axios({
+                method: 'POST',
+                url: 'https://api.trackingmore.com/v4/couriers/detect',
+                headers: this._headers(),
+                data: data,
+                timeout: 10000
+            });
 
             const first = res.data?.data?.[0]?.courier_code;
             if (first) console.log(`[TrackingMore] Detected ${first} for ${tn}`);
@@ -101,44 +105,47 @@ class TrackingMoreProvider {
     async track(trackingNumber, carrierName) {
         const tn = String(trackingNumber).trim();
         try {
-            // STEP 1: Detect Carrier
+            // STEP 1: Detect
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
                 courierCode = await this.detectCourier(tn);
             }
 
-            // STEP 2: Sync via BATCH (as requested in Step 10 - most compatible)
-            // Always send as an array [] for Batch endpoint
-            const batchPayload = [{
-                tracking_number: tn,
-            }];
-            if (courierCode) batchPayload[0].courier_code = courierCode;
-
+            // STEP 2: Sync via CREATE (more reliable for single tracking than batch in some TM accounts)
             let trackingData = null;
+            let payloadStr = '';
             try {
-                const res = await axios.post(
-                    'https://api.trackingmore.com/v4/trackings/batch',
-                    batchPayload,
-                    { headers: this._headers(), timeout: 10000 }
-                );
-                // If batch returns successfully, result is in the data array
-                if (res.data?.meta?.code === 200 && res.data?.data?.[0]) {
+                // Construct clean payload string manually to avoid any "hidden" field issues
+                payloadStr = `{"tracking_number":"${tn}"`;
+                if (courierCode) payloadStr += `,"courier_code":"${courierCode}"`;
+                payloadStr += `}`;
+
+                const res = await axios({
+                    method: 'POST',
+                    url: 'https://api.trackingmore.com/v4/trackings/create',
+                    headers: this._headers(),
+                    data: payloadStr,
+                    timeout: 10000
+                });
+
+                if (res.data?.meta?.code === 200 || res.data?.meta?.code === 4101) {
                     trackingData = res.data;
-                    console.log(`[TrackingMore] Batch sync OK: ${tn}`);
+                    console.log(`[TrackingMore] Sync successful for ${tn}`);
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
-                // Batch usually doesn't fail with 4101 but we handle it just in case
-                console.warn(`[TrackingMore] Batch warning:`, meta?.message || e.message);
+                if (meta?.code === 4101) {
+                    // Logic handles this below by fetching if needed
+                } else {
+                    console.warn(`[TrackingMore] Sync error:`, meta?.message || e.message);
+                }
             }
 
-            // STEP 3: Get Result
+            // STEP 3: Get Status (using plural GET as requested)
             if (!trackingData || !this._extractItem(trackingData, tn)?.origin_info) {
-                // Fetch info if initial create didn't provide enough detail
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`;
-                console.log(`[TrackingMore] Step 3: Fetching from ${reqUrl}`);
-
-                const res = await axios.get(reqUrl, {
+                const res = await axios({
+                    method: 'GET',
+                    url: `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`,
                     headers: this._headers(),
                     timeout: 10000
                 });
