@@ -153,17 +153,17 @@ class TrackingMoreProvider {
             }
 
             await logApiCall({
-                trackingNumber: tn, provider: this.name, requestUrl: 'API-BATCH-GET', requestMethod: 'V4',
-                requestPayload: batchPayload, responseStatus: 200, responsePayload: trackingData
+                trackingNumber: tn, provider: this.name, requestUrl: 'API-v4-Lifecycle', requestMethod: 'STAGES',
+                requestPayload: payloadStr, responseStatus: 200, responsePayload: trackingData
             });
 
             return this._normalize(trackingData, tn);
         } catch (err) {
             const errorData = err.response?.data;
-            console.error(`[TrackingMore] lifecycle failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
+            console.error(`[TrackingMore] Request failed for ${tn}:`, JSON.stringify(errorData || err.message));
 
             await logApiCall({
-                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'POST/GET',
+                trackingNumber: tn, provider: this.name, requestUrl: 'API', requestMethod: 'STAGES',
                 errorMessage: err.message, responseStatus: err.response?.status, responsePayload: errorData
             });
             return null;
