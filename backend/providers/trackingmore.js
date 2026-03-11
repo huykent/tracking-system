@@ -85,16 +85,15 @@ class TrackingMoreProvider {
 
             // 2. Sync to TM
             let trackingData = null;
-            let payloadStr = `{"tracking_number":"${tn}"`;
-            if (courierCode) payloadStr += `,"courier_code":"${courierCode}"`;
-            payloadStr += `}`;
+            const payload = { tracking_number: tn };
+            if (courierCode) payload.courier_code = courierCode;
 
             try {
                 const res = await axios({
                     method: 'POST',
                     url: 'https://api.trackingmore.com/v4/trackings/create',
                     headers: this._headers(),
-                    data: payloadStr,
+                    data: payload, // Axios will stringify this correctly
                     timeout: 10000
                 });
                 // v4 returns 200 on success, 4101 if exists
@@ -108,13 +107,12 @@ class TrackingMoreProvider {
                 }
             }
 
-            // 3. Guarantee Result Detail
+            // 3. Guarantee Detail
             const item = this._extractItem(trackingData, tn);
             if (!item || !item.origin_info || !item.delivery_status) {
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`;
                 const res = await axios({
                     method: 'GET',
-                    url: reqUrl,
+                    url: `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`,
                     headers: this._headers(),
                     timeout: 10000
                 });
@@ -123,7 +121,7 @@ class TrackingMoreProvider {
 
             await logApiCall({
                 trackingNumber: tn, provider: this.name, requestUrl: 'API', requestMethod: 'STAGES',
-                requestPayload: payloadStr, responseStatus: 200, responsePayload: trackingData
+                requestPayload: payload, responseStatus: 200, responsePayload: trackingData
             });
 
             return this._normalize(trackingData, tn);
