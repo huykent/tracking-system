@@ -86,13 +86,15 @@ router.post('/', async (req, res) => {
 
         // Use async API detection fallback
         const { detectShipment } = require('../services/trackingOrchestrator');
-        const detected = await detectShipment(tracking_number);
+        const detected = (await detectShipment(tracking_number)) || { label: 'Unknown', carrierKey: 0, name: 'unknown' };
 
         const { rows } = await query(
             `INSERT INTO shipments (tracking_number, carrier, carrier_key, note, source_platform, ship_time)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (tracking_number) DO UPDATE
-             SET note = EXCLUDED.note, source_platform = EXCLUDED.source_platform, updated_at = NOW()
+             SET note = COALESCE(EXCLUDED.note, shipments.note), 
+                 source_platform = COALESCE(EXCLUDED.source_platform, shipments.source_platform), 
+                 updated_at = NOW()
              RETURNING *`,
             [tracking_number, detected.label, detected.carrierKey, note, source_platform, ship_time || null]
         );
