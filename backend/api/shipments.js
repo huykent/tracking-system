@@ -92,7 +92,9 @@ router.post('/', async (req, res) => {
             `INSERT INTO shipments (tracking_number, carrier, carrier_key, note, source_platform, ship_time)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (tracking_number) DO UPDATE
-             SET note = COALESCE(EXCLUDED.note, shipments.note), 
+             SET carrier = EXCLUDED.carrier,
+                 carrier_key = EXCLUDED.carrier_key,
+                 note = COALESCE(EXCLUDED.note, shipments.note), 
                  source_platform = COALESCE(EXCLUDED.source_platform, shipments.source_platform), 
                  updated_at = NOW()
              RETURNING *`,
