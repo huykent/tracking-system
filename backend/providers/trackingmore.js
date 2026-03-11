@@ -100,8 +100,7 @@ class TrackingMoreProvider {
             }
 
             if (!courierCode) {
-                console.warn(`[TrackingMore] Could not detect courier for ${trackingNumber}`);
-                // Proceed anyway, TM might auto-detect in create
+                console.warn(`[TrackingMore] Could not detect courier for ${trackingNumber}, will attempt auto-detect create`);
             }
 
             // 2. Create Tracking (Step 2)
@@ -110,7 +109,7 @@ class TrackingMoreProvider {
                 courier_code: courierCode || undefined
             };
 
-            console.log(`[TrackingMore] Step 2: Creating tracking for ${trackingNumber} (${courierCode || 'auto-detect'})...`);
+            console.log(`[TrackingMore] Step 2: Syncing tracking for ${trackingNumber}...`);
 
             let trackingData = null;
             try {
@@ -122,24 +121,36 @@ class TrackingMoreProvider {
                 // TM v4 /create returns 200 and data if successful
                 if (createRes.data?.meta?.code === 200) {
                     trackingData = createRes.data;
+                    console.log(`[TrackingMore] Create successful for ${trackingNumber}`);
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
-                // 4101 = Tracking already exists (standard for v4)
+                // 4101 = Tracking already exists
                 if (meta?.code === 4101) {
-                    console.log(`[TrackingMore] ${trackingNumber} already exists, fetching status...`);
+                    console.log(`[TrackingMore] ${trackingNumber} already exists, getting info...`);
                 } else {
-                    console.warn(`[TrackingMore] Create failed:`, meta?.message || e.message);
+                    console.warn(`[TrackingMore] Create error:`, meta?.message || e.message);
                 }
             }
 
-            // 3. Get Tracking Info (Step 3) - Only if create didn't provide full status
-            if (!trackingData || !trackingData.data?.origin_info) {
-                // v4 single search: /trackings/get?tracking_number=...&courier_code=...
-                let reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
-                if (courierCode) reqUrl += `&courier_code=${courierCode}`;
+            // 3. Get Tracking Info (Step 3)
+            // Use RESTful path: /v4/trackings/{courier_code}/{tracking_number}
+            if (!trackingData || !this._extractItem(trackingData, trackingNumber)?.origin_info) {
+                if (!courierCode) {
+                    // If we still don't have a courier code, we must try to detect it or use bulk get
+                    courierCode = await this.detectCourier(trackingNumber);
+                }
 
-                console.log(`[TrackingMore] Step 3: Fetching status: ${reqUrl}`);
+                let reqUrl;
+                if (courierCode) {
+                    // Official REST path for single tracking
+                    reqUrl = `https://api.trackingmore.com/v4/trackings/${courierCode}/${trackingNumber}`;
+                } else {
+                    // Fallback to query param plural if courier unknown
+                    reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+                }
+
+                console.log(`[TrackingMore] Step 3: Fetching status from: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
@@ -148,14 +159,14 @@ class TrackingMoreProvider {
             }
 
             await logApiCall({
-                trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'TrackingMore-v4',
+                trackingNumber, provider: this.name, requestUrl: 'API-Lifecycle', requestMethod: 'POST/GET',
                 requestPayload: createPayload, responseStatus: 200, responsePayload: trackingData
             });
 
             return this._normalize(trackingData, trackingNumber);
         } catch (err) {
             const errorData = err.response?.data;
-            console.error(`[TrackingMore] Lifecycle failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
+            console.error(`[TrackingMore] lifecycle failed for ${trackingNumber}:`, JSON.stringify(errorData || err.message));
 
             await logApiCall({
                 trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'POST/GET',
@@ -165,9 +176,22 @@ class TrackingMoreProvider {
         }
     }
 
+    /**
+     * Internal helper to find the tracking item in TM's varied response formats
+     */
+    _extractItem(data, trackingNumber) {
+        if (!data?.data) return null;
+        if (Array.isArray(data.data)) {
+            return data.data.find(d => d && d.tracking_number === trackingNumber);
+        }
+        if (data.data.tracking_number === trackingNumber) {
+            return data.data;
+        }
+        return null;
+    }
+
     _normalize(data, trackingNumber) {
-        // Handle array (from batch or bulk search) or object (from single search)
-        const item = Array.isArray(data?.data) ? data.data.find(d => d.tracking_number === trackingNumber) : data?.data;
+        const item = this._extractItem(data, trackingNumber);
         if (!item) return null;
 
         /**
