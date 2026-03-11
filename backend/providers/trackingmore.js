@@ -93,10 +93,10 @@ class TrackingMoreProvider {
             const couriers = res.data?.data || [];
             if (couriers.length === 0) return null;
 
-            // INTELLIGENT PRIORITIZATION: avoid matching local VN carriers for global prefixes
+            // INTELLIGENT MATCHING: YT numbers are often YTO or YunExpress
             if (tn.startsWith('YT')) {
-                // Prefer YTO or YunExpress for YT numbers
-                const match = couriers.find(c => ['yto', 'yunexpress'].includes(c.courier_code));
+                const preference = ['yto', 'yunexpress'];
+                const match = couriers.find(c => preference.includes(c.courier_code));
                 if (match) return match.courier_code;
             }
 
@@ -105,6 +105,7 @@ class TrackingMoreProvider {
                 if (match) return match.courier_code;
             }
 
+            // Fallback to highest confidence
             return couriers[0]?.courier_code || null;
         } catch (err) {
             console.warn(`[TrackingMore] Detect failed:`, err.response?.data?.meta?.message || err.message);
@@ -115,20 +116,19 @@ class TrackingMoreProvider {
     async track(trackingNumber, carrierName) {
         const tn = String(trackingNumber).trim();
         try {
-            // STEP 1: Detect
+            // 1. Resolve Courier
             let courierCode = this._getCarrierCode(carrierName);
             if (!courierCode) {
                 courierCode = await this.detectCourier(tn);
             }
 
-            // STEP 2: Sync via CREATE
+            // 2. Sync to TM
             let trackingData = null;
-            let payloadStr = '';
-            try {
-                payloadStr = `{"tracking_number":"${tn}"`;
-                if (courierCode) payloadStr += `,"courier_code":"${courierCode}"`;
-                payloadStr += `}`;
+            let payloadStr = `{"tracking_number":"${tn}"`;
+            if (courierCode) payloadStr += `,"courier_code":"${courierCode}"`;
+            payloadStr += `}`;
 
+            try {
                 const res = await axios({
                     method: 'POST',
                     url: 'https://api.trackingmore.com/v4/trackings/create',
@@ -136,22 +136,25 @@ class TrackingMoreProvider {
                     data: payloadStr,
                     timeout: 10000
                 });
-
+                // v4 returns 200 on success, 4101 if exists
                 if (res.data?.meta?.code === 200 || res.data?.meta?.code === 4101) {
                     trackingData = res.data;
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
                 if (meta?.code !== 4101) {
-                    console.warn(`[TrackingMore] Sync error:`, meta?.message || e.message);
+                    console.warn(`[TrackingMore] Create warning for ${tn}:`, meta?.message || e.message);
                 }
             }
 
-            // STEP 3: Get Status
-            if (!trackingData || !this._extractItem(trackingData, tn)?.origin_info) {
+            // 3. Guarantee Result Detail
+            // If create didn't return full object or it's missing events, fetch fresh
+            const item = this._extractItem(trackingData, tn);
+            if (!item || !item.origin_info || !item.delivery_status) {
+                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`;
                 const res = await axios({
                     method: 'GET',
-                    url: `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`,
+                    url: reqUrl,
                     headers: this._headers(),
                     timeout: 10000
                 });
@@ -159,7 +162,7 @@ class TrackingMoreProvider {
             }
 
             await logApiCall({
-                trackingNumber: tn, provider: this.name, requestUrl: 'API-v4-Lifecycle', requestMethod: 'STAGES',
+                trackingNumber: tn, provider: this.name, requestUrl: 'API', requestMethod: 'STAGES',
                 requestPayload: payloadStr, responseStatus: 200, responsePayload: trackingData
             });
 
@@ -169,7 +172,7 @@ class TrackingMoreProvider {
             console.error(`[TrackingMore] Request failed for ${tn}:`, JSON.stringify(errorData || err.message));
 
             await logApiCall({
-                trackingNumber: tn, provider: this.name, requestUrl: 'API-v4-Lifecycle', requestMethod: 'STAGES',
+                trackingNumber: tn, provider: this.name, requestUrl: 'API', requestMethod: 'STAGES',
                 errorMessage: err.message, responseStatus: err.response?.status, responsePayload: errorData
             });
             return null;
@@ -182,20 +185,16 @@ class TrackingMoreProvider {
     _extractItem(data, trackingNumber) {
         if (!data?.data) return null;
         const list = Array.isArray(data.data) ? data.data : [data.data];
-        return list.find(d => d && d.tracking_number === trackingNumber);
+        // Match by tracking_number OR order_number (v4 versatility)
+        return list.find(d => d && (d.tracking_number === trackingNumber || d.order_number === trackingNumber));
     }
 
     _normalize(data, trackingNumber) {
         const item = this._extractItem(data, trackingNumber);
         if (!item) return null;
 
-        console.log(`[TrackingMore] Normalizing ${trackingNumber}, API Carrier: ${item.courier_code} (${item.courier_name || 'N/A'})`);
+        console.log(`[TrackingMore] Normalizing ${trackingNumber}, API Carrier: ${item.courier_name} (${item.courier_code})`);
 
-        /**
-         * TrackingMore status values:
-         * pending, info_received, in_transit, picking, out_for_delivery,
-         * delivered, expired, failed_attempt, exception, returning, returned
-         */
         let delivery_status = 'pending';
         const tmStatus = item.delivery_status;
 
@@ -204,7 +203,6 @@ class TrackingMoreProvider {
         else if (['failed_attempt', 'exception', 'expired', 'returning', 'returned'].includes(tmStatus)) delivery_status = 'failed';
         else if (tmStatus && tmStatus !== 'pending') delivery_status = 'delivering';
 
-        // Collect events from origin_info and destination_info
         const events = [];
         const originTrack = item.origin_info?.trackinfo || [];
         const destTrack = item.destination_info?.trackinfo || [];
@@ -219,12 +217,11 @@ class TrackingMoreProvider {
             });
         }
 
-        // Sort most recent first
         events.sort((a, b) => new Date(b.event_time) - new Date(a.event_time));
 
         return {
             tracking_number: trackingNumber,
-            // Prefer descriptive name, fallback to code, then Unknown
+            // Source of truth: the official Courier Name from TM
             carrier: item.courier_name || item.courier_code || 'Unknown',
             delivery_status,
             events
