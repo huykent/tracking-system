@@ -3,7 +3,7 @@ const Redis = require('ioredis');
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const redis = new Redis(redisUrl, {
-    maxRetriesPerRequest: 3,
+    maxRetriesPerRequest: null,
     enableReadyCheck: true,
     lazyConnect: false,
     retryStrategy(times) {
