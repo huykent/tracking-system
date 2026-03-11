@@ -131,9 +131,9 @@ async function saveTrackingResult(result) {
     // Update shipment
     await query(
         `UPDATE shipments
-         SET delivery_status = $1, last_tracking_update = NOW(), last_event_hash = $2, api_provider = $3, updated_at = NOW()
-         WHERE tracking_number = $4`,
-        [delivery_status, eventHash, api_provider, tracking_number]
+         SET delivery_status = $1, last_tracking_update = NOW(), last_event_hash = $2, api_provider = $3, carrier = $4, updated_at = NOW()
+         WHERE tracking_number = $5`,
+        [delivery_status, eventHash, api_provider, result.carrier, tracking_number]
     );
 
     // Insert new events (skip duplicates by raw_data hash)

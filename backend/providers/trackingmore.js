@@ -223,7 +223,7 @@ class TrackingMoreProvider {
 
         return {
             tracking_number: trackingNumber,
-            carrier: item.courier_code || carrierName,
+            carrier: item.courier_code || 'Unknown',
             delivery_status,
             events
         };
