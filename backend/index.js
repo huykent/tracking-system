@@ -21,6 +21,7 @@ app.use('/api/dashboard', require('./api/dashboard'));
 app.use('/api/providers', require('./api/providers'));
 app.use('/api/settings', require('./api/settings'));
 app.use('/api/logs', require('./api/logs'));
+app.use('/api/webhooks', require('./api/webhooks'));
 
 // ─── Health check ─────────────────────────────────────────
 app.get('/health', async (req, res) => {

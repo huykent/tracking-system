@@ -74,6 +74,9 @@ PORT=4000
 
 # ── Frontend ────────────────────────────────
 NEXT_PUBLIC_API_URL=http://localhost:4000
+
+# ── Webhooks ────────────────────────────────
+TRACKINGMORE_WEBHOOK_SECRET=your_webhook_secret_here
 EOF
     echo -e "${GREEN}✓ Đã tạo .env (nhớ đổi password!)${NC}"
 else

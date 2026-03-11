@@ -40,8 +40,8 @@ class TrackingMoreProvider {
             yunda: 'yunda-express', yundaexpress: 'yunda-express',
             // Best Express
             baishi: 'best-express', best: 'best-express', bestexpress: 'best-express',
-            // JT Express
-            jt: 'jt-express', jtexpress: 'jt-express',
+            // J&T Express
+            jt: 'jt-express', jtexpress: 'jt-express', jnt: 'jt-express',
             // Cainiao
             cainiao: 'cainiao',
             // 4PX
@@ -62,6 +62,15 @@ class TrackingMoreProvider {
             yunexpress: 'yunexpress',
             // USPS
             usps: 'usps',
+            // Vietnamese Carriers
+            ghn: 'ghn', giaohangnhanh: 'ghn',
+            ghtk: 'ghtk', giaohangtietkiem: 'ghtk',
+            viettel: 'viettel-post', viettelpost: 'viettel-post', vtpl: 'viettel-post',
+            vnpost: 'vietnam-post', vietnampost: 'vietnam-post',
+            ninjavan: 'ninjavan', ninja: 'ninjavan',
+            lalamove: 'lalamove',
+            grab: 'grab-express', grabexpress: 'grab-express',
+            snappy: 'snappy',
         };
 
         const code = map[key];
