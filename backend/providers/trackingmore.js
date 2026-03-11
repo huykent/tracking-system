@@ -103,12 +103,14 @@ class TrackingMoreProvider {
             if (!courierCode) {
                 console.log(`[TrackingMore] Local mapping unknown for "${carrierName}", calling API detection...`);
                 courierCode = await this.detectCourier(trackingNumber);
+                console.log(`[TrackingMore] API Detection result for ${trackingNumber}: ${courierCode}`);
             }
 
             // Step 1: Create tracking
             const createPayload = { tracking_number: trackingNumber };
             if (courierCode) createPayload.courier_code = courierCode;
 
+            console.log(`[TrackingMore] Creating tracking with payload:`, JSON.stringify(createPayload));
             let trackingData = null;
 
             try {
