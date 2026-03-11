@@ -38,8 +38,8 @@ app.get('/health', async (req, res) => {
 
 // ─── Error handler ────────────────────────────────────────
 app.use((err, req, res, next) => {
-    console.error('[Server] Unhandled error:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('[Server] Unhandled error:', err.stack || err.message);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
 // ─── Start ────────────────────────────────────────────────
