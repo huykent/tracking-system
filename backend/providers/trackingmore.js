@@ -131,12 +131,19 @@ class TrackingMoreProvider {
 
             // Step 2: Get tracking info if not obtained from create
             if (!trackingData) {
-                const reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${trackingNumber}`;
+                let reqUrl = `https://api.trackingmore.com/v4/trackings/get?tracking_number=${trackingNumber}`;
+                if (courierCode) reqUrl += `&courier_code=${courierCode}`;
+
+                console.log(`[TrackingMore] Fetching: ${reqUrl}`);
                 const res = await axios.get(reqUrl, {
                     headers: this._headers(),
                     timeout: 10000
                 });
                 trackingData = res.data;
+
+                if (trackingData?.meta?.code !== 200) {
+                    console.warn(`[TrackingMore] GET error for ${trackingNumber}:`, trackingData?.meta);
+                }
             }
 
             await logApiCall({
@@ -146,10 +153,12 @@ class TrackingMoreProvider {
 
             return this._normalize(trackingData, trackingNumber);
         } catch (err) {
-            console.error(`[TrackingMore] Error tracking ${trackingNumber}:`, err.response?.data || err.message);
+            const errorData = err.response?.data;
+            console.error(`[TrackingMore] Error tracking ${trackingNumber}:`, errorData || err.message);
+
             await logApiCall({
                 trackingNumber, provider: this.name, requestUrl: 'API', requestMethod: 'GET',
-                errorMessage: err.message, responseStatus: err.response?.status, responsePayload: err.response?.data
+                errorMessage: err.message, responseStatus: err.response?.status, responsePayload: errorData
             });
             return null;
         }
