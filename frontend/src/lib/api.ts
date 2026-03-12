@@ -71,7 +71,7 @@ export interface TrackingEvent {
 
 export interface Provider {
     id: number; name: string; label: string; enabled: boolean
-    daily_limit: number; used_today: number; priority: number; has_key: boolean
+    daily_limit: number; used_today: number; priority: number; has_key: boolean; api_key?: string
 }
 
 export interface CarrierInfo { name: string; label: string; carrierKey: number }

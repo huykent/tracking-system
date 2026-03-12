@@ -6,16 +6,51 @@ const { logApiCall } = require('../services/apiLogger');
  */
 class TrackingMoreProvider {
     constructor(apiKey) {
-        this.apiKey = apiKey;
+        try {
+            this.apiKeys = JSON.parse(apiKey);
+            if (!Array.isArray(this.apiKeys)) throw new Error('Not array');
+        } catch (e) {
+            const parts = (apiKey || '').split(',').map(k => k.trim()).filter(Boolean);
+            this.apiKeys = parts.map(k => ({ key: k, used: 0, limit: 50, month: new Date().getMonth() }));
+        }
         this.name = 'trackingmore';
+    }
+
+    _getAvailableKeyObj() {
+        if (this.apiKeys.length === 0) return null;
+
+        const currentMonth = new Date().getMonth();
+        let fallback = this.apiKeys[0];
+
+        for (const k of this.apiKeys) {
+            if (k.month !== currentMonth) {
+                k.used = 0;
+                k.month = currentMonth;
+            }
+            if (k.used < k.limit) {
+                return k;
+            }
+        }
+        return fallback; // Return first one even if over limit as fallback
+    }
+
+    async _incrementUsage(keyObj) {
+        if (!keyObj) return;
+        keyObj.used += 1;
+        try {
+            const { query } = require('../db');
+            await query(`UPDATE api_providers SET api_key = $1 WHERE name = 'trackingmore'`, [JSON.stringify(this.apiKeys)]);
+        } catch (e) {
+            console.error('[TrackingMore] Failed to update key usage in DB:', e.message);
+        }
     }
 
     /**
      * Internal headers for TrackingMore v4
      */
-    _headers() {
+    _headers(keyStr) {
         return {
-            'Tracking-Api-Key': this.apiKey,
+            'Tracking-Api-Key': keyStr || '',
             'Accept': 'application/json',
             'Content-Type': 'application/json'
         };
@@ -29,7 +64,7 @@ class TrackingMoreProvider {
         return null;
     }
 
-    async detectCourier(trackingNumber) {
+    async detectCourier(trackingNumber, keyStr) {
         try {
             const tn = String(trackingNumber).trim().toUpperCase();
             console.log(`[TrackingMore] Detecting ${tn}...`);
@@ -37,7 +72,7 @@ class TrackingMoreProvider {
             const res = await axios({
                 method: 'POST',
                 url: 'https://api.trackingmore.com/v4/couriers/detect',
-                headers: this._headers(),
+                headers: this._headers(keyStr),
                 data: { tracking_number: tn },
                 timeout: 10000
             });
@@ -79,9 +114,12 @@ class TrackingMoreProvider {
 
     async track(trackingNumber, carrierName) {
         const tn = String(trackingNumber).trim();
+        const keyObj = this._getAvailableKeyObj();
+        const keyStr = keyObj ? keyObj.key : '';
+
         try {
             // Force re-detection every time for maximum accuracy
-            const detectedData = await this.detectCourier(tn);
+            const detectedData = await this.detectCourier(tn, keyStr);
             const courierCode = detectedData?.courier_code || null;
 
             // 2. Sync to TM
@@ -93,13 +131,17 @@ class TrackingMoreProvider {
                 const res = await axios({
                     method: 'POST',
                     url: 'https://api.trackingmore.com/v4/trackings/create',
-                    headers: this._headers(),
+                    headers: this._headers(keyStr),
                     data: payload, // Axios will stringify this correctly
                     timeout: 10000
                 });
                 // v4 returns 200 on success, 4101 if exists
                 if (res.data?.meta?.code === 200 || res.data?.meta?.code === 4101) {
                     trackingData = res.data;
+                    if (res.data?.meta?.code === 200) {
+                        // Only increment tracking limit usage on successful NEW creation
+                        await this._incrementUsage(keyObj);
+                    }
                 }
             } catch (e) {
                 const meta = e.response?.data?.meta;
@@ -114,7 +156,7 @@ class TrackingMoreProvider {
                 const res = await axios({
                     method: 'GET',
                     url: `https://api.trackingmore.com/v4/trackings/get?tracking_numbers=${tn}`,
-                    headers: this._headers(),
+                    headers: this._headers(keyStr),
                     timeout: 10000
                 });
                 trackingData = res.data;

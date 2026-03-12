@@ -6,7 +6,7 @@ const { query } = require('../db');
 router.get('/', async (req, res) => {
     try {
         const { rows } = await query(
-            `SELECT id, name, label, enabled, daily_limit, used_today, priority,
+            `SELECT id, name, label, enabled, daily_limit, used_today, priority, api_key,
                     CASE WHEN api_key IS NOT NULL AND api_key != '' THEN true ELSE false END as has_key
              FROM api_providers ORDER BY priority ASC`
         );

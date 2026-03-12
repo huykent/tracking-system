@@ -52,6 +52,7 @@ export default function ShipmentsPage() {
     }
 
     const handleDelete = async (id: string, e: React.MouseEvent) => {
+        e.preventDefault()
         e.stopPropagation()
         if (!confirm('Delete this shipment?')) return
         await api.shipments.delete(id)
@@ -59,6 +60,7 @@ export default function ShipmentsPage() {
     }
 
     const handleRefresh = async (id: string, e: React.MouseEvent) => {
+        e.preventDefault()
         e.stopPropagation()
         await api.shipments.refresh(id)
         setTimeout(() => load(), 2000)
@@ -194,18 +196,18 @@ export default function ShipmentsPage() {
                                             </span>
                                         </td>
                                         <td className="text-right">
-                                            <div className="flex items-center justify-end gap-1">
+                                            <div className="flex items-center justify-end gap-1 relative z-10" onClick={e => e.stopPropagation()}>
                                                 <button className="p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-indigo-400 transition-colors"
-                                                    onClick={e => { e.stopPropagation(); router.push(`/shipments/${s.id}`) }}>
-                                                    <Eye size={14} />
+                                                    onClick={e => { e.preventDefault(); e.stopPropagation(); router.push(`/shipments/${s.id}`) }}>
+                                                    <Eye size={14} className="pointer-events-none" />
                                                 </button>
                                                 <button className="p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-blue-400 transition-colors"
                                                     onClick={e => handleRefresh(s.id, e)}>
-                                                    <RotateCw size={14} />
+                                                    <RotateCw size={14} className="pointer-events-none" />
                                                 </button>
                                                 <button className="p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-red-400 transition-colors"
                                                     onClick={e => handleDelete(s.id, e)}>
-                                                    <Trash2 size={14} />
+                                                    <Trash2 size={14} className="pointer-events-none" />
                                                 </button>
                                             </div>
                                         </td>
